@@ -780,6 +780,16 @@ func init() {
 	if err := EncoderRegistry.Register(reflect.TypeOf(driverCommon.VectorBinary(nil)), MinTTCProtocolVersion, converters.EncodeVectorBinary); err != nil {
 		common.Odl.Warn("Failed to register VectorBinary encoder", "error", err)
 	}
+	for vectorType, encoder := range map[reflect.Type]encoderFunc{
+		reflect.TypeOf(driverCommon.SparseVectorFloat64{}): converters.EncodeSparseVectorFloat64,
+		reflect.TypeOf(driverCommon.SparseVectorFloat32{}): converters.EncodeSparseVectorFloat32,
+		reflect.TypeOf(driverCommon.SparseVectorInt8{}):    converters.EncodeSparseVectorInt8,
+		reflect.TypeOf(driverCommon.SparseVectorBinary{}):  converters.EncodeSparseVectorBinary,
+	} {
+		if err := EncoderRegistry.Register(vectorType, MinTTCProtocolVersion, encoder); err != nil {
+			common.Odl.Warn("Failed to register sparse VECTOR encoder", "type", vectorType, "error", err)
+		}
+	}
 	if err := EncoderRegistry.Register(reflect.TypeOf(time.Time{}), MinTTCProtocolVersion, converters.EncodeTimestampWithTimeZone); err != nil {
 		common.Odl.Warn("Failed to register time.Time encoder", "error", err)
 	}
@@ -966,6 +976,19 @@ func init() {
 			maxLength:   converters.MaxVarcharLength,
 		}); err != nil {
 			common.Odl.Warn("Failed to register VECTOR bind OAC", "type", vectorType, "error", err)
+		}
+	}
+	for _, vectorType := range []reflect.Type{
+		reflect.TypeOf(driverCommon.SparseVectorFloat64{}),
+		reflect.TypeOf(driverCommon.SparseVectorFloat32{}),
+		reflect.TypeOf(driverCommon.SparseVectorInt8{}),
+		reflect.TypeOf(driverCommon.SparseVectorBinary{}),
+	} {
+		if err := BindOacRegistry.Register(vectorType, MinTTCProtocolVersion, bindOacType{
+			bindOacFunc: func(maxLength driverCommon.UB4) driverCommon.Marshallable { return newTTIoac(DtyVec, maxLength) },
+			maxLength:   converters.MaxVarcharLength,
+		}); err != nil {
+			common.Odl.Warn("Failed to register sparse VECTOR bind OAC", "type", vectorType, "error", err)
 		}
 	}
 	if err := BindOacRegistry.Register(reflect.TypeOf([]byte(nil)), MinTTCProtocolVersion, bindOacType{bindOacFunc: newTTIOacBytes, maxLength: 32767}); err != nil {

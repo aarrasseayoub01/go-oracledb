@@ -11,15 +11,20 @@ import (
 )
 
 var (
-	vectorFloat64Type = reflect.TypeOf(driverCommon.VectorFloat64(nil))
-	vectorFloat32Type = reflect.TypeOf(driverCommon.VectorFloat32(nil))
-	vectorInt8Type    = reflect.TypeOf(driverCommon.VectorInt8(nil))
-	vectorBinaryType  = reflect.TypeOf(driverCommon.VectorBinary(nil))
+	vectorFloat64Type       = reflect.TypeOf(driverCommon.VectorFloat64(nil))
+	vectorFloat32Type       = reflect.TypeOf(driverCommon.VectorFloat32(nil))
+	vectorInt8Type          = reflect.TypeOf(driverCommon.VectorInt8(nil))
+	vectorBinaryType        = reflect.TypeOf(driverCommon.VectorBinary(nil))
+	sparseVectorFloat64Type = reflect.TypeOf(driverCommon.SparseVectorFloat64{})
+	sparseVectorFloat32Type = reflect.TypeOf(driverCommon.SparseVectorFloat32{})
+	sparseVectorInt8Type    = reflect.TypeOf(driverCommon.SparseVectorInt8{})
+	sparseVectorBinaryType  = reflect.TypeOf(driverCommon.SparseVectorBinary{})
 )
 
 func isVectorBindType(goType reflect.Type) bool {
 	switch goType {
-	case vectorFloat64Type, vectorFloat32Type, vectorInt8Type, vectorBinaryType:
+	case vectorFloat64Type, vectorFloat32Type, vectorInt8Type, vectorBinaryType,
+		sparseVectorFloat64Type, sparseVectorFloat32Type, sparseVectorInt8Type, sparseVectorBinaryType:
 		return true
 	default:
 		return false
