@@ -18,3 +18,19 @@ type VectorInt8 = driverCommon.VectorInt8
 // Each byte stores 8 dimensions in MSB-first order.
 // VECTOR query results are decoded as []byte using the same packed layout.
 type VectorBinary = driverCommon.VectorBinary
+
+// SparseVectorFloat64 is a sparse VECTOR(FLOAT64) value. Query results are
+// decoded as this type.
+type SparseVectorFloat64 = driverCommon.SparseVectorFloat64
+
+// SparseVectorFloat32 is a sparse VECTOR(FLOAT32) value. Query results are
+// decoded as this type.
+type SparseVectorFloat32 = driverCommon.SparseVectorFloat32
+
+// SparseVectorInt8 is a sparse VECTOR(INT8) value. Query results are decoded
+// as this type.
+type SparseVectorInt8 = driverCommon.SparseVectorInt8
+
+// SparseVectorBinary is a sparse VECTOR(BINARY) value. Query results are
+// decoded as this type; each listed index denotes a set bit.
+type SparseVectorBinary = driverCommon.SparseVectorBinary
