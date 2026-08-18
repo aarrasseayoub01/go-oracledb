@@ -18,6 +18,7 @@ Oracle Database Driver for Go is a native Go driver for Go's [database/sql](http
   - JSON support returning JSON as `string`
   - BLOB support using prefetch and returning `[]byte`
   - CLOB support using prefetch and returning `string`
+  - VECTOR support for dense and sparse `FLOAT64`, `FLOAT32`, `INT8`, and `BINARY` values (Oracle Database 23ai+)
 
 ## Installation
 Run:
@@ -312,6 +313,17 @@ Errors are returned as `oracle.SQLError` which implements Go's `Error` interface
 | Oracle Type   | Driver returns       |
 |---------------|----------------------|
 | `JSON` (21c+) | `string`             |
+| `VECTOR` (23ai+) | Dense: `[]float64`, `[]float32`, `[]int8`, or `[]byte`; sparse: matching `SparseVector*` value |
+
+To bind a VECTOR value, use the corresponding named type: `oracle.VectorFloat64`,
+`oracle.VectorFloat32`, `oracle.VectorInt8`, or `oracle.VectorBinary`. `VectorBinary`
+uses packed, most-significant-bit-first bits.
+
+Sparse VECTOR values use `oracle.SparseVectorFloat64`, `oracle.SparseVectorFloat32`,
+`oracle.SparseVectorInt8`, or `oracle.SparseVectorBinary`. `Dimensions` is the total
+vector length and `Indices` contains zero-based positions of non-zero dimensions;
+numeric sparse values store the corresponding entries in `Values`. Sparse BINARY values
+have no `Values` field because every listed index is implicitly set.
 
 ## Help
 Are you having trouble with Oracle Database Driver for Go? We want to help!
