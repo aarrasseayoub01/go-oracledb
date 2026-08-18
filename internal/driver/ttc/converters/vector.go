@@ -18,6 +18,7 @@ const (
 
 	vectorMagic           = 0xDB
 	vectorVersionV0       = 0
+	vectorVersionV2       = 2
 	vectorBaseHeaderBytes = 9
 	vectorNormBytes       = 8
 	vectorHeaderBytes     = vectorBaseHeaderBytes + vectorNormBytes
@@ -83,6 +84,58 @@ func EncodeVectorBinary(v driver.Value) (driverCommon.B1Array, error) {
 	return encodeVectorBinary(values)
 }
 
+// EncodeSparseVectorFloat64 encodes common.SparseVectorFloat64 into Oracle
+// SPARSE VECTOR(FLOAT64) wire layout.
+func EncodeSparseVectorFloat64(v driver.Value) (driverCommon.B1Array, error) {
+	values, ok := v.(driverCommon.SparseVectorFloat64)
+	if !ok {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonInvalidValue, "common.SparseVectorFloat64")
+	}
+	if err := validateSparseVector(values.Dimensions, values.Indices, len(values.Values)); err != nil {
+		return nil, err
+	}
+	return encodeSparseVectorFloat64(values)
+}
+
+// EncodeSparseVectorFloat32 encodes common.SparseVectorFloat32 into Oracle
+// SPARSE VECTOR(FLOAT32) wire layout.
+func EncodeSparseVectorFloat32(v driver.Value) (driverCommon.B1Array, error) {
+	values, ok := v.(driverCommon.SparseVectorFloat32)
+	if !ok {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonInvalidValue, "common.SparseVectorFloat32")
+	}
+	if err := validateSparseVector(values.Dimensions, values.Indices, len(values.Values)); err != nil {
+		return nil, err
+	}
+	return encodeSparseVectorFloat32(values)
+}
+
+// EncodeSparseVectorInt8 encodes common.SparseVectorInt8 into Oracle SPARSE
+// VECTOR(INT8) wire layout.
+func EncodeSparseVectorInt8(v driver.Value) (driverCommon.B1Array, error) {
+	values, ok := v.(driverCommon.SparseVectorInt8)
+	if !ok {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonInvalidValue, "common.SparseVectorInt8")
+	}
+	if err := validateSparseVector(values.Dimensions, values.Indices, len(values.Values)); err != nil {
+		return nil, err
+	}
+	return encodeSparseVectorInt8(values)
+}
+
+// EncodeSparseVectorBinary encodes common.SparseVectorBinary into Oracle
+// SPARSE VECTOR(BINARY) wire layout.
+func EncodeSparseVectorBinary(v driver.Value) (driverCommon.B1Array, error) {
+	values, ok := v.(driverCommon.SparseVectorBinary)
+	if !ok {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonInvalidValue, "common.SparseVectorBinary")
+	}
+	if err := validateSparseVector(values.Dimensions, values.Indices, len(values.Indices)); err != nil {
+		return nil, err
+	}
+	return encodeSparseVectorBinary(values)
+}
+
 // DecodeVector decodes Oracle VECTOR data into the matching Go slice type:
 // []float64, []float32, []int8, or []byte (packed bits for BINARY vectors).
 func DecodeVector(data driverCommon.B1Array) (driver.Value, error) {
@@ -144,6 +197,72 @@ func encodeVectorBinary(values driverCommon.VectorBinary) (driverCommon.B1Array,
 	return out, nil
 }
 
+func encodeSparseVectorFloat64(values driverCommon.SparseVectorFloat64) (driverCommon.B1Array, error) {
+	out := makeSparseVectorBuffer(vectorTypeFloat64, values.Dimensions, len(values.Indices), len(values.Values)*8, vectorFlagNorm|vectorFlagNormSource)
+	offset := writeSparseVectorIndices(out, values.Indices)
+	for _, value := range values.Values {
+		putOracleBinaryDouble(out[offset:offset+8], value)
+		offset += 8
+	}
+	return out, nil
+}
+
+func encodeSparseVectorFloat32(values driverCommon.SparseVectorFloat32) (driverCommon.B1Array, error) {
+	out := makeSparseVectorBuffer(vectorTypeFloat32, values.Dimensions, len(values.Indices), len(values.Values)*4, vectorFlagNorm|vectorFlagNormSource)
+	offset := writeSparseVectorIndices(out, values.Indices)
+	for _, value := range values.Values {
+		putOracleBinaryFloat(out[offset:offset+4], value)
+		offset += 4
+	}
+	return out, nil
+}
+
+func encodeSparseVectorInt8(values driverCommon.SparseVectorInt8) (driverCommon.B1Array, error) {
+	out := makeSparseVectorBuffer(vectorTypeInt8, values.Dimensions, len(values.Indices), len(values.Values), vectorFlagNorm|vectorFlagNormSource)
+	offset := writeSparseVectorIndices(out, values.Indices)
+	for _, value := range values.Values {
+		out[offset] = byte(value)
+		offset++
+	}
+	return out, nil
+}
+
+func encodeSparseVectorBinary(values driverCommon.SparseVectorBinary) (driverCommon.B1Array, error) {
+	out := makeSparseVectorBuffer(vectorTypeBinary, values.Dimensions, len(values.Indices), 0, vectorFlagNormSource)
+	writeSparseVectorIndices(out, values.Indices)
+	return out, nil
+}
+
+func makeSparseVectorBuffer(typeCode byte, dimensions uint32, count, valueBytes int, flags uint16) driverCommon.B1Array {
+	out := make(driverCommon.B1Array, vectorHeaderBytes+2+count*4+valueBytes)
+	writeVectorHeader(out, vectorVersionV2, vectorFlagSparse|flags, typeCode, dimensions)
+	return out
+}
+
+func writeSparseVectorIndices(out driverCommon.B1Array, indices []uint32) int {
+	offset := vectorHeaderBytes
+	binary.BigEndian.PutUint16(out[offset:offset+2], uint16(len(indices)))
+	offset += 2
+	for _, index := range indices {
+		binary.BigEndian.PutUint32(out[offset:offset+4], index)
+		offset += 4
+	}
+	return offset
+}
+
+func validateSparseVector(dimensions uint32, indices []uint32, valuesLength int) error {
+	if dimensions > maxVectorDimensions {
+		return common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonOutOfRange, "dimensions<=65535")
+	}
+	if len(indices) > maxVectorDimensions {
+		return common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonOutOfRange, "non-zero-dimensions<=65535")
+	}
+	if len(indices) != valuesLength {
+		return common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Encode", driverCommon.ReasonInvalidLength, "indices==values")
+	}
+	return nil
+}
+
 func writeVectorHeader(out []byte, version byte, flags uint16, typeCode byte, dimensions uint32) {
 	out[0] = vectorMagic
 	out[1] = version
@@ -173,8 +292,17 @@ func decodeVector(data []byte) (driver.Value, error) {
 	if flags&vectorFlagOptional != 0 {
 		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidFormat, "optional-flags-unsupported")
 	}
+	payloadOffset := vectorBaseHeaderBytes
+	if flags&(vectorFlagNorm|vectorFlagNormSource) != 0 {
+		// The norm field is present whenever either flag is set. Accepting both
+		// forms keeps decoding compatible with clients that omit norm metadata.
+		payloadOffset += vectorNormBytes
+	}
 	if flags&vectorFlagSparse != 0 {
-		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidFormat, "sparse-unsupported")
+		if version != vectorVersionV2 {
+			return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidValue, "sparse-version=2")
+		}
+		return decodeSparseVector(data[payloadOffset:], typeCode, dimensionCount, flags)
 	}
 	if version != vectorVersionV0 {
 		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidValue, "version=0")
@@ -183,12 +311,6 @@ func decodeVector(data []byte) (driver.Value, error) {
 	valueBytes, err := vectorValueByteLength(typeCode, dimensionCount)
 	if err != nil {
 		return nil, err
-	}
-	payloadOffset := vectorBaseHeaderBytes
-	if flags&(vectorFlagNorm|vectorFlagNormSource) != 0 {
-		// The norm field is present whenever either flag is set. Accepting both
-		// forms keeps decoding compatible with clients that omit norm metadata.
-		payloadOffset += vectorNormBytes
 	}
 	expected := payloadOffset + valueBytes
 	if len(data) != expected {
@@ -231,6 +353,82 @@ func decodeVector(data []byte) (driver.Value, error) {
 		return out, nil
 	default:
 		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidFormat, "type=2|3|4|5")
+	}
+}
+
+func decodeSparseVector(payload []byte, typeCode byte, dimensions uint32, flags uint16) (driver.Value, error) {
+	if dimensions > maxVectorDimensions {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonOutOfRange, "dimension-count")
+	}
+	if len(payload) < 2 {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidLength, ">=2")
+	}
+	count := int(binary.BigEndian.Uint16(payload[:2]))
+	indicesBytes := count * 4
+	if len(payload) < 2+indicesBytes {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidLength, "sparse-indices")
+	}
+	indices := make([]uint32, count)
+	offset := 2
+	for i := range indices {
+		indices[i] = binary.BigEndian.Uint32(payload[offset : offset+4])
+		offset += 4
+	}
+
+	valueBytes, err := vectorSparseValueByteLength(typeCode, count)
+	if err != nil {
+		return nil, err
+	}
+	if len(payload) != offset+valueBytes {
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidLength, "sparse-values")
+	}
+	values := payload[offset:]
+	switch typeCode {
+	case vectorTypeFloat64:
+		out := driverCommon.SparseVectorFloat64{Dimensions: dimensions, Indices: indices, Values: make([]float64, count)}
+		for i := range out.Values {
+			value, err := decodeFloat64Dimension(values[i*8:(i+1)*8], flags)
+			if err != nil {
+				return nil, err
+			}
+			out.Values[i] = value
+		}
+		return out, nil
+	case vectorTypeFloat32:
+		out := driverCommon.SparseVectorFloat32{Dimensions: dimensions, Indices: indices, Values: make([]float32, count)}
+		for i := range out.Values {
+			value, err := decodeFloat32Dimension(values[i*4:(i+1)*4], flags)
+			if err != nil {
+				return nil, err
+			}
+			out.Values[i] = value
+		}
+		return out, nil
+	case vectorTypeInt8:
+		out := driverCommon.SparseVectorInt8{Dimensions: dimensions, Indices: indices, Values: make([]int8, count)}
+		for i := range out.Values {
+			out.Values[i] = int8(values[i])
+		}
+		return out, nil
+	case vectorTypeBinary:
+		return driverCommon.SparseVectorBinary{Dimensions: dimensions, Indices: indices}, nil
+	default:
+		return nil, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidFormat, "type=2|3|4|5")
+	}
+}
+
+func vectorSparseValueByteLength(typeCode byte, count int) (int, error) {
+	switch typeCode {
+	case vectorTypeFloat64:
+		return count * 8, nil
+	case vectorTypeFloat32:
+		return count * 4, nil
+	case vectorTypeInt8:
+		return count, nil
+	case vectorTypeBinary:
+		return 0, nil
+	default:
+		return 0, common.NewOracleError(oracleErrors.ConverterExpectedFormat, nil, vectorTypeName, "Decode", driverCommon.ReasonInvalidFormat, "unknown-type")
 	}
 }
 
