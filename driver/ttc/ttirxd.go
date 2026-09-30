@@ -68,7 +68,7 @@ type tTIrxd struct {
 	bvcFound bool
 
 	// Outgoing bind payload for TTIRXD when marshalling bind values (Phase 1: single row binds).
-	bindRow        []common.B1Array
+	bindRow        []bindValue
 	columnContexts []ColumnContext
 	lobColContext  []*LobColumnContext
 
@@ -145,24 +145,23 @@ func (rxd *tTIrxd) getLobColumnContext() []*LobColumnContext {
 }
 
 /*
-
-setBindValues sets the outgoing bind payload for marshalling as an RXD message.
+setBindValues sets the prepared outgoing bind values for marshalling as an RXD message.
 
 Parameters:
-- row: row is the encoded data for one row: a slice of CLR-ready byte arrays, one per column.
-       Each element should contain the wire-format bytes for that column (nil indicates SQL NULL).
+  - row: one prepared bind value per bind position for a single row. Each value
+    contains its encoded payload and the wire framing selected for its Go type.
+    Unregistered types use CLR framing; a nil payload is sent as SQL NULL.
 */
-
-func (rxd *tTIrxd) setBindValues(row []common.B1Array) {
+func (rxd *tTIrxd) setBindValues(row []bindValue) {
 	rxd.bindRow = row
 }
 
 /*
 MarshalTo writes the RXD bind payload for outgoing messages (single row).
 
-When used as an outgoing message, tTIrxd marshals the bind row values as a CLR sequence,
-using the TTC null length indicator for nil values. The call to MarshalTo marshals the
-encoded bytes for a single row.
+When used as an outgoing message, tTIrxd delegates each bind value to its selected
+wire representation. The default representation is CLR framing with TTC's null
+length indicator for nil payloads.
 */
 func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine common.Marshaller) error {
 	// Nothing to marshal if no bind payload was configured.
@@ -171,21 +170,8 @@ func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine common.Marshaller) erro
 	}
 	bindCount := len(rxd.bindRow)
 	for i := 0; i < bindCount; i++ {
-		val := rxd.bindRow[i]
-		if val == nil {
-			// Write CLR null indicator
-			if err := engine.MarshalUB1(ctx, common.UB1(0)); err != nil {
-				common.Odl.Error("tTIrxd.MarshalTo: failed to write null length indicator",
-					"error", err, "stage", "null-indicator", "index", i)
-				return common.NewOracleError(common.FailMarshal, err, TTCMsgTypeDescription[rxd.GetMsgCode()])
-			}
-			continue
-		}
-		// Write as CLR (short or long form depending on size)
-		if err := engine.MarshalCLR(ctx, val, 0, len(val)); err != nil {
-			common.Odl.Error("tTIrxd.MarshalTo: failed to write CLR",
-				"error", err, "stage", "clr", "index", i)
-			return common.NewOracleError(common.FailMarshal, err, TTCMsgTypeDescription[rxd.GetMsgCode()])
+		if err := rxd.bindRow[i].marshal(ctx, engine, rxd.GetMsgCode(), i); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -130,7 +130,7 @@ type statementProcessor struct {
 	opts          common.UB4                    // OALL8 option bitmask (parse/execute/commit/no-PLSQL/binds-present flags etc).
 	al8i4         []common.UB4                  // AL8I4 options vector attached to OALL8 (iterations, select flag, extra protocol flags).
 	bindValues    []any                         // Original bind values (ordered by position) for the current execution.
-	encodedValues [][]common.B1Array            // Wire-encoded bind payloads per iteration (each inner slice is a TTIRXD bind row).
+	encodedValues [][]bindValue                 // Prepared bind values per iteration (each inner slice is a TTIRXD bind row).
 	currentOacs   []common.Marshallable         // Per-bind OAC descriptors (type/size metadata) sent alongside bind values.
 	previousOacs  []common.Marshallable         // Cached OACs from previous execution of the statement
 }
@@ -648,9 +648,9 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 	e.bindValues = make([]any, n)
 	// TODO : currently, just do it for single row, later when
 	//        batching support is added, make it dynamic.
-	e.encodedValues = make([][]common.B1Array, 1)
+	e.encodedValues = make([][]bindValue, 1)
 	currentRow := 0
-	e.encodedValues[currentRow] = make([]common.B1Array, n)
+	e.encodedValues[currentRow] = make([]bindValue, n)
 	e.currentOacs = make([]common.Marshallable, n)
 	for i, v := range args {
 		e.bindValues[i] = v
@@ -662,14 +662,18 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 			return err
 		}
 
-		e.encodedValues[currentRow][i], err = encoder(normalized.value)
+		payload, err := encoder(normalized.value)
+		if err != nil {
+			return err
+		}
+		e.encodedValues[currentRow][i], err = e.shelf.GetCodecFactory().GetBindValue(normalized, payload)
 		if err != nil {
 			return err
 		}
 
 		e.currentOacs[i], err = e.shelf.GetCodecFactory().GetBindOac(
 			normalized,
-			e.getMaxLengthForOac(i, len(e.encodedValues[currentRow][i])),
+			e.getMaxLengthForOac(i, len(payload)),
 		)
 		if err != nil {
 			return err

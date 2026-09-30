@@ -161,6 +161,9 @@ func (t *testCodecFactory) GetDecoder(_ DtyType) (*typeDecoder, error) {
 func (t *testCodecFactory) GetBindOac(_ normalizedBindValue, _ common.UB4) (common.Marshallable, error) {
 	return t.bindOac, nil
 }
+func (t *testCodecFactory) GetBindValue(_ normalizedBindValue, payload common.B1Array) (bindValue, error) {
+	return newCLRBindValue(payload), nil
+}
 func (t *testCodecFactory) GetDefineOac(_ DtyType, _ ColumnContext, _ *common.OracleDriverProperties) common.Marshallable {
 	return t.defineOac
 }

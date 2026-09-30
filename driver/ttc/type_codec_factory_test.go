@@ -39,6 +39,7 @@
 package ttc
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
@@ -76,6 +77,53 @@ func dummyDefineOacA(ColumnContext, common.UB4) common.Marshallable {
 
 func dummyDefineOacB(ColumnContext, common.UB4) common.Marshallable {
 	return newTTIoac(DtyVCS, define_maxlength_varchar)
+}
+
+func dummyTransportWire(context.Context, common.Marshaller, common.MessageType, int, common.B1Array) error {
+	return nil
+}
+
+type bindTransportTestValue string
+
+func TestCodecFactory_GetBindValue(t *testing.T) {
+	registry := newCodecRegistry[reflect.Type, bindTransportFunc]()
+	transport := func(payload common.B1Array) bindValue {
+		return bindValue{payload: payload, wire: dummyTransportWire}
+	}
+	if err := registry.Register(reflect.TypeOf(bindTransportTestValue("")), 2, transport); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	factory := &CodecFactoryImpl{ttcVersion: 2, bindTransports: registry}
+	value, err := factory.GetBindValue(normalizeBindValue(bindTransportTestValue("value")), common.B1Array{1, 2})
+	if err != nil {
+		t.Fatalf("GetBindValue returned error: %v", err)
+	}
+	if value.wire == nil || reflect.ValueOf(value.wire).Pointer() != reflect.ValueOf(dummyTransportWire).Pointer() {
+		t.Fatal("registered bind transport was not selected")
+	}
+	if !reflect.DeepEqual(value.payload, common.B1Array{1, 2}) {
+		t.Fatalf("payload mismatch: got %v", value.payload)
+	}
+
+	fallback, err := factory.GetBindValue(normalizeBindValue(int64(1)), common.B1Array{3})
+	if err != nil {
+		t.Fatalf("GetBindValue fallback returned error: %v", err)
+	}
+	if reflect.ValueOf(fallback.wire).Pointer() != reflect.ValueOf(marshalCLRBind).Pointer() {
+		t.Fatal("unregistered bind type did not use CLR framing")
+	}
+
+	outOnly, err := factory.GetBindValue(
+		normalizeBindValue(sql.Out{Dest: new(bindTransportTestValue)}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("GetBindValue for OUT bind returned error: %v", err)
+	}
+	if reflect.ValueOf(outOnly.wire).Pointer() != reflect.ValueOf(marshalCLRBind).Pointer() {
+		t.Fatal("OUT-only bind did not use CLR null framing")
+	}
 }
 
 // TestCodecFactory_GetEncoder exercises encoder selection and error paths for CodecFactoryImpl.
