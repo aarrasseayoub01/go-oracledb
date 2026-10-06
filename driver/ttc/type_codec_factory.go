@@ -594,10 +594,6 @@ func (f *CodecFactoryImpl) GetBindOac(normalized normalizedBindValue, maxLength 
 // representation. The default is CLR framing, so a type only needs to register
 // when its bytes require a different protocol envelope.
 func (f *CodecFactoryImpl) GetBindValue(normalized normalizedBindValue, payload common.B1Array) (bindValue, error) {
-	if normalized.isOutOnly || payload == nil || f.bindTransports == nil {
-		return newCLRBindValue(payload), nil
-	}
-
 	candidates := f.bindTransports.getCandidates(normalized.goType)
 	bestCandidate := getEntryFromRegistry(f.ttcVersion, candidates)
 	if bestCandidate == nil {

@@ -46,11 +46,13 @@ import (
 )
 
 // bindWireFunc writes one encoded bind value into an outgoing TTIRXD message.
-// The default implementation uses the ordinary TTC CLR representation.
+// ctx carries cancellation, mar receives the wire bytes, msgType and index
+// identify the enclosing TTC message and bind position for error reporting,
+// and payload contains the type codec's encoded value.
 type bindWireFunc func(context.Context, common.Marshaller, common.MessageType, int, common.B1Array) error
 
 // bindValue keeps an encoded bind payload together with the wire representation
-// selected for its Go type. A nil wire function uses ordinary CLR framing.
+// selected for its Go type.
 type bindValue struct {
 	payload common.B1Array
 	wire    bindWireFunc
@@ -60,12 +62,8 @@ func newCLRBindValue(payload common.B1Array) bindValue {
 	return bindValue{payload: payload, wire: marshalCLRBind}
 }
 
-// marshal writes v with its selected wire representation. A value without a
-// registered representation falls back to ordinary TTC CLR framing.
+// marshal writes v with its selected wire representation.
 func (v bindValue) marshal(ctx context.Context, mar common.Marshaller, msgType common.MessageType, index int) error {
-	if v.wire == nil {
-		return marshalCLRBind(ctx, mar, msgType, index, v.payload)
-	}
 	return v.wire(ctx, mar, msgType, index, v.payload)
 }
 
@@ -74,16 +72,16 @@ func (v bindValue) marshal(ctx context.Context, mar common.Marshaller, msgType c
 func marshalCLRBind(ctx context.Context, mar common.Marshaller, msgType common.MessageType, index int, payload common.B1Array) error {
 	if payload == nil {
 		if err := mar.MarshalUB1(ctx, common.UB1(0)); err != nil {
-			common.Odl.Error("tTIrxd.MarshalTo: failed to write null length indicator",
-				"error", err, "stage", "null-indicator", "index", index)
+			common.Odl.Error("marshalCLRBind: failed to write null length indicator",
+				"error", err, "message", TTCMsgTypeDescription[msgType], "stage", "null-indicator", "index", index)
 			return common.NewOracleError(common.FailMarshal, err, TTCMsgTypeDescription[msgType])
 		}
 		return nil
 	}
 
 	if err := mar.MarshalCLR(ctx, payload, 0, len(payload)); err != nil {
-		common.Odl.Error("tTIrxd.MarshalTo: failed to write CLR",
-			"error", err, "stage", "clr", "index", index)
+		common.Odl.Error("marshalCLRBind: failed to write CLR",
+			"error", err, "message", TTCMsgTypeDescription[msgType], "stage", "clr", "index", index)
 		return common.NewOracleError(common.FailMarshal, err, TTCMsgTypeDescription[msgType])
 	}
 	return nil

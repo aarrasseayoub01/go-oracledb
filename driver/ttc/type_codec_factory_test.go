@@ -85,6 +85,8 @@ func dummyTransportWire(context.Context, common.Marshaller, common.MessageType, 
 
 type bindTransportTestValue string
 
+// TestCodecFactory_GetBindValue verifies that a registered type uses its
+// custom transport and an unregistered type falls back to CLR framing.
 func TestCodecFactory_GetBindValue(t *testing.T) {
 	registry := newCodecRegistry[reflect.Type, bindTransportFunc]()
 	transport := func(payload common.B1Array) bindValue {
@@ -121,8 +123,8 @@ func TestCodecFactory_GetBindValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBindValue for OUT bind returned error: %v", err)
 	}
-	if reflect.ValueOf(outOnly.wire).Pointer() != reflect.ValueOf(marshalCLRBind).Pointer() {
-		t.Fatal("OUT-only bind did not use CLR null framing")
+	if reflect.ValueOf(outOnly.wire).Pointer() != reflect.ValueOf(dummyTransportWire).Pointer() {
+		t.Fatal("OUT-only bind did not use the registered transport")
 	}
 }
 
