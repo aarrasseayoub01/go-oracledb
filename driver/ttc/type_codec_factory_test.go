@@ -83,48 +83,33 @@ func dummyTransportWire(context.Context, common.Marshaller, common.MessageType, 
 	return nil
 }
 
-type bindTransportTestValue string
+type specialWireTestValue string
 
-// TestCodecFactory_GetBindValue verifies that a registered type uses its
-// custom transport and an unregistered type falls back to CLR framing.
-func TestCodecFactory_GetBindValue(t *testing.T) {
-	registry := newCodecRegistry[reflect.Type, bindTransportFunc]()
-	transport := func(payload common.B1Array) bindValue {
-		return bindValue{payload: payload, wire: dummyTransportWire}
+// TestCodecFactory_GetEncoder_CustomWire verifies that an encoder registration
+// can select a non-CLR TTIRXD representation for its prepared bind value.
+func TestCodecFactory_GetEncoder_CustomWire(t *testing.T) {
+	registry := newCodecRegistry[reflect.Type, encoderFunc]()
+	encoder := func(driver.Value) (bindValue, error) {
+		return bindValue{payload: common.B1Array{1, 2}, wire: dummyTransportWire}, nil
 	}
-	if err := registry.Register(reflect.TypeOf(bindTransportTestValue("")), 2, transport); err != nil {
-		t.Fatalf("register transport: %v", err)
+	if err := registry.Register(reflect.TypeOf(specialWireTestValue("")), 2, encoder); err != nil {
+		t.Fatalf("register encoder: %v", err)
 	}
 
-	factory := &CodecFactoryImpl{ttcVersion: 2, bindTransports: registry}
-	value, err := factory.GetBindValue(normalizeBindValue(bindTransportTestValue("value")), common.B1Array{1, 2})
+	factory := &CodecFactoryImpl{ttcVersion: 2, encoders: registry}
+	selected, err := factory.GetEncoder(normalizeBindValue(specialWireTestValue("value")))
 	if err != nil {
-		t.Fatalf("GetBindValue returned error: %v", err)
+		t.Fatalf("GetEncoder returned error: %v", err)
 	}
-	if value.wire == nil || reflect.ValueOf(value.wire).Pointer() != reflect.ValueOf(dummyTransportWire).Pointer() {
-		t.Fatal("registered bind transport was not selected")
+	value, err := selected(specialWireTestValue("value"))
+	if err != nil {
+		t.Fatalf("encoder returned error: %v", err)
 	}
 	if !reflect.DeepEqual(value.payload, common.B1Array{1, 2}) {
 		t.Fatalf("payload mismatch: got %v", value.payload)
 	}
-
-	fallback, err := factory.GetBindValue(normalizeBindValue(int64(1)), common.B1Array{3})
-	if err != nil {
-		t.Fatalf("GetBindValue fallback returned error: %v", err)
-	}
-	if reflect.ValueOf(fallback.wire).Pointer() != reflect.ValueOf(marshalCLRBind).Pointer() {
-		t.Fatal("unregistered bind type did not use CLR framing")
-	}
-
-	outOnly, err := factory.GetBindValue(
-		normalizeBindValue(sql.Out{Dest: new(bindTransportTestValue)}),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("GetBindValue for OUT bind returned error: %v", err)
-	}
-	if reflect.ValueOf(outOnly.wire).Pointer() != reflect.ValueOf(dummyTransportWire).Pointer() {
-		t.Fatal("OUT-only bind did not use the registered transport")
+	if reflect.ValueOf(value.wire).Pointer() != reflect.ValueOf(dummyTransportWire).Pointer() {
+		t.Fatal("custom TTIRXD writer was not selected")
 	}
 }
 
@@ -149,8 +134,8 @@ func TestCodecFactory_GetEncoder(t *testing.T) {
 			protocol: 3,
 			value:    int64(0),
 			setup: func(reg *codecRegistry[reflect.Type, encoderFunc]) {
-				reg.Register(reflect.TypeOf(int64(0)), 1, dummyEncoderA)
-				reg.Register(reflect.TypeOf(int64(0)), 3, dummyEncoderB)
+				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
+				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
 			},
 			wantValue: common.B1Array{1, 2, 3},
 		},
@@ -159,7 +144,7 @@ func TestCodecFactory_GetEncoder(t *testing.T) {
 			protocol: 1,
 			value:    int64(0),
 			setup: func(reg *codecRegistry[reflect.Type, encoderFunc]) {
-				reg.Register(reflect.TypeOf(int64(0)), 2, dummyEncoderB)
+				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
 			errCode:     common.InternalError,
@@ -204,8 +189,8 @@ func TestCodecFactory_GetEncoder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected encode error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tc.wantValue) {
-				t.Fatalf("returned encoder mismatch: got %v want %v", got, tc.wantValue)
+			if !reflect.DeepEqual(got.payload, tc.wantValue) {
+				t.Fatalf("returned encoder payload mismatch: got %v want %v", got.payload, tc.wantValue)
 			}
 		})
 	}
@@ -579,8 +564,9 @@ func TestCodecFactory_RegisterEncoderGeneric(t *testing.T) {
 	encodeString := func(driver.Value) (common.B1Array, error) {
 		return common.B1Array{0x1}, nil
 	}
+	encoder := newCLRBindEncoder(encodeString)
 
-	if err := EncoderRegistry.Register(reflect.TypeOf(""), 2, encodeString); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(""), 2, encoder); err != nil {
 		t.Fatalf("RegisterEncoder returned unexpected error: %v", err)
 	}
 
@@ -591,7 +577,7 @@ func TestCodecFactory_RegisterEncoderGeneric(t *testing.T) {
 	if candidates[0].fromTTCProtocolVersion != 2 {
 		t.Fatalf("expected from protocol 2, got %d", candidates[0].fromTTCProtocolVersion)
 	}
-	if reflect.ValueOf(candidates[0].makeFunc).Pointer() != reflect.ValueOf(encodeString).Pointer() {
+	if reflect.ValueOf(candidates[0].makeFunc).Pointer() != reflect.ValueOf(encoder).Pointer() {
 		t.Fatalf("registered encoder function mismatch")
 	}
 }

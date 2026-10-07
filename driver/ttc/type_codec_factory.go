@@ -73,8 +73,9 @@ Description:
 		// Bind/encode path: resolve OAC + encoder for a Go value.
 		bindValue := "hello"
 
-		enc, _ := f.GetEncoder(bindValue)
-		wireBytes, _ := enc.encodeToType(enc.encodeValue)
+		enc, _ := f.GetEncoder(normalizeBindValue(bindValue))
+		encoded, _ := enc(bindValue)
+		wireBytes := encoded.payload
 		_ = wireBytes // send over TTC
 
 		oac, _ := f.GetBindOac(bindValue, common.UB4(len(wireBytes)))
@@ -89,14 +90,29 @@ type codecFactory interface {
 	GetEncoder(normalizedBindValue) (encoderFunc, error)
 	GetDecoder(DtyType) (*typeDecoder, error)
 	GetBindOac(normalizedBindValue, common.UB4) (common.Marshallable, error)
-	GetBindValue(normalizedBindValue, common.B1Array) (bindValue, error)
 	GetDefineOac(DtyType, ColumnContext, *common.OracleDriverProperties) common.Marshallable
 }
 
-// encoderFunc defines the function signature of encoder functions.
-// This function is used during registration to instantiate new encoders.
-// implementor.
-type encoderFunc func(driver.Value) (common.B1Array, error)
+// encoderFunc prepares one bind value, including the TTIRXD representation
+// used to marshal it. Ordinary types use CLR framing; types with a distinct
+// TTC bind format can provide their own writer.
+type encoderFunc func(driver.Value) (bindValue, error)
+
+// valueEncoderFunc encodes a Go value into its logical payload bytes without
+// choosing a TTIRXD representation.
+type valueEncoderFunc func(driver.Value) (common.B1Array, error)
+
+// newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
+// bind representation.
+func newCLRBindEncoder(encode valueEncoderFunc) encoderFunc {
+	return func(value driver.Value) (bindValue, error) {
+		payload, err := encode(value)
+		if err != nil {
+			return bindValue{}, err
+		}
+		return newCLRBindValue(payload), nil
+	}
+}
 
 // decoderFunc defines the signature for TTC decoder implementors registered with the
 // codec factory. The function receives the column context and raw TTC data bytes and is
@@ -107,10 +123,6 @@ type decoderFunc func(ColumnContext, common.B1Array) (driver.Value, error)
 // with the codec factory. The function receives the requested maximum bind length
 // and must return a TTC OAC descriptor suitable for marshalling bind metadata.
 type bindOacFunc func(common.UB4) common.Marshallable
-
-// bindTransportFunc prepares encoded bytes for a type-specific TTIRXD wire
-// representation. Types without a transport use ordinary CLR framing.
-type bindTransportFunc func(common.B1Array) bindValue
 
 // bindOacType stores a bind OAC constructor together with the default max-length
 // and scale metadata that should be applied for OUT bind handling.
@@ -385,10 +397,6 @@ var DecoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
 // BindOacRegistry is the global registry for bind OAC metadata keyed by Go type.
 var BindOacRegistry = newCodecRegistry[reflect.Type, bindOacType]()
 
-// BindTransportRegistry is the global registry for type-specific TTIRXD bind
-// framing keyed by Go type. Types without an entry are sent as ordinary CLRs.
-var BindTransportRegistry = newCodecRegistry[reflect.Type, bindTransportFunc]()
-
 // DefineOacRegistry is the global registry for define OAC instances keyed by Oracle database type,
 // column context and connection properties.
 var DefineOacRegistry = newCodecRegistry[DtyType, defineOacFunc]()
@@ -402,16 +410,14 @@ Description:
 	- EncoderRegistry (Go reflect.Type -> encoderFunc)
 	- DecoderRegistry (Oracle db type id -> decoderFunc)
 	- BindOacRegistry (Go reflect.Type -> bindOacType)
-	- BindTransportRegistry (Go reflect.Type -> bindTransportFunc)
 	- DefineOacRegistry (Oracle db type id -> defineOacFunc)
 */
 type CodecFactoryImpl struct {
-	ttcVersion     int8
-	encoders       *codecRegistry[reflect.Type, encoderFunc]
-	decoders       *codecRegistry[DtyType, *typeDecoder]
-	bindOacs       *codecRegistry[reflect.Type, bindOacType]
-	bindTransports *codecRegistry[reflect.Type, bindTransportFunc]
-	defineOacs     *codecRegistry[DtyType, defineOacFunc]
+	ttcVersion int8
+	encoders   *codecRegistry[reflect.Type, encoderFunc]
+	decoders   *codecRegistry[DtyType, *typeDecoder]
+	bindOacs   *codecRegistry[reflect.Type, bindOacType]
+	defineOacs *codecRegistry[DtyType, defineOacFunc]
 }
 
 /*
@@ -433,12 +439,11 @@ Errors:
 */
 func NewCodecFactoryForProtocol(protocolVersion int8) codecFactory {
 	return &CodecFactoryImpl{
-		ttcVersion:     protocolVersion,
-		encoders:       EncoderRegistry,
-		decoders:       DecoderRegistry,
-		bindOacs:       BindOacRegistry,
-		bindTransports: BindTransportRegistry,
-		defineOacs:     DefineOacRegistry,
+		ttcVersion: protocolVersion,
+		encoders:   EncoderRegistry,
+		decoders:   DecoderRegistry,
+		bindOacs:   BindOacRegistry,
+		defineOacs: DefineOacRegistry,
 	}
 }
 
@@ -463,7 +468,7 @@ Errors:
 */
 func (f *CodecFactoryImpl) GetEncoder(normalized normalizedBindValue) (encoderFunc, error) {
 	if normalized.isOutOnly || normalized.value == nil {
-		return converters.EncodeNull, nil
+		return newCLRBindEncoder(converters.EncodeNull), nil
 	}
 	common.Odl.Debug("New encoder requested", "goType", normalized.goType)
 
@@ -588,18 +593,6 @@ func (f *CodecFactoryImpl) GetBindOac(normalized normalizedBindValue, maxLength 
 	err := common.NewOracleError(common.InternalError, nil)
 	common.Odl.Error("Bind OAC candidate missing", "goType", normalized.goType, "error", err)
 	return nil, err
-}
-
-// GetBindValue pairs encoded bind bytes with their selected TTIRXD wire
-// representation. The default is CLR framing, so a type only needs to register
-// when its bytes require a different protocol envelope.
-func (f *CodecFactoryImpl) GetBindValue(normalized normalizedBindValue, payload common.B1Array) (bindValue, error) {
-	candidates := f.bindTransports.getCandidates(normalized.goType)
-	bestCandidate := getEntryFromRegistry(f.ttcVersion, candidates)
-	if bestCandidate == nil {
-		return newCLRBindValue(payload), nil
-	}
-	return bestCandidate.makeFunc(payload), nil
 }
 
 /*

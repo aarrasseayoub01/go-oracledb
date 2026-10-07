@@ -61,24 +61,24 @@ import (
 func registerTestCodecs(shelf *ttiShelf[common.MessageType], ttcProtocolVersion int8) {
 	// Register encoders used by prepareBindsAndOAC tests.
 	// (Registration uses "version 2" which is <= any supported protocol version in tests.)
-	_ = EncoderRegistry.Register(reflect.TypeOf(int64(0)), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	_ = EncoderRegistry.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeInt(v.(int64))
-	})
-	_ = EncoderRegistry.Register(reflect.TypeOf(""), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	}))
+	_ = EncoderRegistry.Register(reflect.TypeOf(""), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeVarchar(v.(string))
-	})
-	_ = EncoderRegistry.Register(reflect.TypeOf([]byte(nil)), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	}))
+	_ = EncoderRegistry.Register(reflect.TypeOf([]byte(nil)), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return common.B1Array(v.([]byte)), nil
-	})
-	_ = EncoderRegistry.Register(reflect.TypeOf(true), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	}))
+	_ = EncoderRegistry.Register(reflect.TypeOf(true), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeBoolean(v.(bool))
-	})
-	_ = EncoderRegistry.Register(reflect.TypeOf(time.Time{}), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	}))
+	_ = EncoderRegistry.Register(reflect.TypeOf(time.Time{}), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeTimestampWithTimeZone(v.(time.Time))
-	})
-	_ = EncoderRegistry.Register(reflect.TypeOf(nil), 2, func(v sqldriver.Value) (common.B1Array, error) {
+	}))
+	_ = EncoderRegistry.Register(reflect.TypeOf(nil), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeNull(v)
-	})
+	}))
 
 	// Register bind OAC makers used by prepareBindsAndOAC tests.
 	_ = BindOacRegistry.Register(reflect.TypeOf(int64(0)), 2, bindOacType{
