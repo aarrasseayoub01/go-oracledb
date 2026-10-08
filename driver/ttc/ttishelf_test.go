@@ -150,7 +150,7 @@ type testCodecFactory struct {
 	defineOac common.Marshallable
 }
 
-func (t *testCodecFactory) GetEncoder(_ normalizedBindValue) (encoderFunc, error) {
+func (t *testCodecFactory) GetEncoder(_ normalizedBindValue) (*typeEncoder, error) {
 	return newCLRBindEncoder(func(driver.Value) (common.B1Array, error) { return t.encode, nil }), nil
 }
 func (t *testCodecFactory) GetDecoder(_ DtyType) (*typeDecoder, error) {

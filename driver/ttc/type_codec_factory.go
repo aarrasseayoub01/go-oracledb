@@ -74,7 +74,7 @@ Description:
 		bindValue := "hello"
 
 		enc, _ := f.GetEncoder(normalizeBindValue(bindValue))
-		encoded, _ := enc(bindValue)
+		encoded, _ := enc.encode(bindValue)
 		wireBytes := encoded.payload
 		_ = wireBytes // send over TTC
 
@@ -87,31 +87,40 @@ Description:
 		_ = v // decoded driver.Value (string, number, time.Time, etc.)
 */
 type codecFactory interface {
-	GetEncoder(normalizedBindValue) (encoderFunc, error)
+	GetEncoder(normalizedBindValue) (*typeEncoder, error)
 	GetDecoder(DtyType) (*typeDecoder, error)
 	GetBindOac(normalizedBindValue, common.UB4) (common.Marshallable, error)
 	GetDefineOac(DtyType, ColumnContext, *common.OracleDriverProperties) common.Marshallable
 }
 
-// encoderFunc prepares one bind value, including the TTIRXD representation
-// used to marshal it. Ordinary types use CLR framing; types with a distinct
-// TTC bind format can provide their own writer.
-type encoderFunc func(driver.Value) (bindValue, error)
+// encoderFunc encodes a Go bind value into its logical payload bytes.
+type encoderFunc func(driver.Value) (common.B1Array, error)
 
-// valueEncoderFunc encodes a Go value into its logical payload bytes without
-// choosing a TTIRXD representation.
-type valueEncoderFunc func(driver.Value) (common.B1Array, error)
+// typeEncoder groups logical value encoding and TTC bind framing for one Go
+// type and TTC protocol version.
+type typeEncoder struct {
+	encodeToType encoderFunc
+	wire         bindWireFunc
+}
+
+// newTypeEncoder associates a value encoder with its TTIRXD bind framing.
+func newTypeEncoder(encode encoderFunc, wire bindWireFunc) *typeEncoder {
+	return &typeEncoder{encodeToType: encode, wire: wire}
+}
 
 // newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
 // bind representation.
-func newCLRBindEncoder(encode valueEncoderFunc) encoderFunc {
-	return func(value driver.Value) (bindValue, error) {
-		payload, err := encode(value)
-		if err != nil {
-			return bindValue{}, err
-		}
-		return newCLRBindValue(payload), nil
+func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
+	return newTypeEncoder(encode, marshalCLRBind)
+}
+
+// encode prepares the logical payload and preserves the type's selected bind writer.
+func (e *typeEncoder) encode(value driver.Value) (bindValue, error) {
+	payload, err := e.encodeToType(value)
+	if err != nil {
+		return bindValue{}, err
 	}
+	return bindValue{payload: payload, wire: e.wire}, nil
 }
 
 // decoderFunc defines the signature for TTC decoder implementors registered with the
@@ -389,7 +398,7 @@ func (r *codecRegistry[K, F]) getCandidates(key K) []codecRegistryEntry[F] {
 
 // EncoderRegistry is the global registry for encoders keyed by Go type.
 // Populate it during package init of encoder implementors.
-var EncoderRegistry = newCodecRegistry[reflect.Type, encoderFunc]()
+var EncoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
 
 // DecoderRegistry is the global registry for decoders keyed by Oracle database type.
 var DecoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
@@ -407,14 +416,14 @@ CodecFactoryImpl is the codecFactory implementation used by TTC to resolve encod
 Description:
 
 	Uses the negotiated TTC protocol version to select the "best" registered implementation candidate from:
-	- EncoderRegistry (Go reflect.Type -> encoderFunc)
+	- EncoderRegistry (Go reflect.Type -> typeEncoder)
 	- DecoderRegistry (Oracle db type id -> decoderFunc)
 	- BindOacRegistry (Go reflect.Type -> bindOacType)
 	- DefineOacRegistry (Oracle db type id -> defineOacFunc)
 */
 type CodecFactoryImpl struct {
 	ttcVersion int8
-	encoders   *codecRegistry[reflect.Type, encoderFunc]
+	encoders   *codecRegistry[reflect.Type, *typeEncoder]
 	decoders   *codecRegistry[DtyType, *typeDecoder]
 	bindOacs   *codecRegistry[reflect.Type, bindOacType]
 	defineOacs *codecRegistry[DtyType, defineOacFunc]
@@ -460,13 +469,13 @@ Parameters:
   - normalized: The normalized bind value to encode.
 
 Returns:
-  - encoderFunc: The selected encoder implementation.
+  - *typeEncoder: The selected encoder and bind-framing implementation.
   - error: Non-nil if no compatible encoder is registered.
 
 Errors:
   - Returns a common.OracleError with code common.InternalError when no encoder candidate exists for the bind type.
 */
-func (f *CodecFactoryImpl) GetEncoder(normalized normalizedBindValue) (encoderFunc, error) {
+func (f *CodecFactoryImpl) GetEncoder(normalized normalizedBindValue) (*typeEncoder, error) {
 	if normalized.isOutOnly || normalized.value == nil {
 		return newCLRBindEncoder(converters.EncodeNull), nil
 	}
