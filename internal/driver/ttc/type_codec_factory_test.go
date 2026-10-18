@@ -88,7 +88,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 		name        string
 		protocol    int8
 		value       driver.Value
-		setup       func(reg *codecRegistry[reflect.Type, encoderFunc])
+		setup       func(reg *codecRegistry[reflect.Type, *typeEncoder])
 		wantValue   common.B1Array
 		expectError bool
 		errCode     oracleErrors.ErrorCode
@@ -99,9 +99,9 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:     "selects highest version within protocol",
 			protocol: 3,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, encoderFunc]) {
-				reg.Register(reflect.TypeOf(int64(0)), 1, dummyEncoderA)
-				reg.Register(reflect.TypeOf(int64(0)), 3, dummyEncoderB)
+			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
+				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
 			},
 			wantValue: common.B1Array{1, 2, 3},
 		},
@@ -109,8 +109,8 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:     "skips candidates greater than protocol",
 			protocol: 1,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, encoderFunc]) {
-				reg.Register(reflect.TypeOf(int64(0)), 2, dummyEncoderB)
+			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
@@ -119,7 +119,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:        "no registered encoder",
 			protocol:    1,
 			value:       "",
-			setup:       func(reg *codecRegistry[reflect.Type, encoderFunc]) {},
+			setup:       func(reg *codecRegistry[reflect.Type, *typeEncoder]) {},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
 		},
@@ -127,7 +127,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			encReg := newCodecRegistry[reflect.Type, encoderFunc]()
+			encReg := newCodecRegistry[reflect.Type, *typeEncoder]()
 			if tc.setup != nil {
 				tc.setup(encReg)
 			}
@@ -151,12 +151,12 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			got, err := encoder(normalizeBindValue(tc.value).value)
+			got, err := encoder.encode(normalizeBindValue(tc.value).value)
 			if err != nil {
 				t.Fatalf("unexpected encode error: %v", err)
 			}
-			if !reflect.DeepEqual(got, tc.wantValue) {
-				t.Fatalf("returned encoder mismatch: got %v want %v", got, tc.wantValue)
+			if !reflect.DeepEqual(got.payload, tc.wantValue) {
+				t.Fatalf("returned encoder mismatch: got %v want %v", got.payload, tc.wantValue)
 			}
 		})
 	}

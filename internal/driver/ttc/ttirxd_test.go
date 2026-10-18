@@ -147,7 +147,7 @@ func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 		},
 	}})
 
-	buf, eng := NewMarshalEngineTest(session.BIG_ENDIAN, B2, Universal, 64)
+	buf, eng := NewMarshalEngineTest(common.BIG_ENDIAN, B2, Universal, 64)
 	if err := rxd.MarshalTo(context.Background(), eng); err != nil {
 		t.Fatalf("MarshalTo returned error: %v", err)
 	}

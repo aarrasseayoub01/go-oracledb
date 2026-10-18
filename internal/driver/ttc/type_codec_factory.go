@@ -74,17 +74,17 @@ Description:
 
 		// Bind/encode path: resolve OAC + encoder for a Go value.
 		bindValue := "hello"
+		normalized := normalizeBindValue(bindValue)
 
-		enc, _ := f.getEncoder(bindValue)
-		wireBytes, _ := enc.encodeToType(enc.encodeValue)
-		_ = wireBytes // send over TTC
+		encoder, _ := f.getEncoder(normalized)
+		encoded, _ := encoder.encode(normalized.value)
 
-		oac, _ := f.getBindOac(bindValue, common.UB4(len(wireBytes)))
+		oac, _ := f.getBindOac(normalized, driverCommon.UB4(len(encoded.payload)))
 		_ = oac // e.g. used to describe bind metadata (type/length) in TTC messages
 
 		// Row/scan path: resolve a decoder for an Oracle database type id.
 		decoder, _ := f.getDecoder(DtyVCS)
-		v, _ := decoder.decodeToType(columnContext{Name: "C1", Index: 0}, wireBytes)
+		v, _ := decoder.decodeToType(columnContext{Name: "C1", Index: 0}, encoded.payload)
 		_ = v // decoded driver.Value (string, number, time.Time, etc.)
 */
 type codecFactory interface {
@@ -310,7 +310,7 @@ Description:
 
 	codecRegistry stores one or more candidates per key K (for example, Go reflect.Type or Oracle db type id).
 	Multiple candidates are supported to allow different implementations across TTC protocol versions.
-	Selection is performed by helper functions such as getBestEncoder/getBestDecoder/getBestBindOac/getBestDefineOac.
+	Selection is performed by getEntryFromRegistry using the negotiated TTC protocol version.
 */
 type codecRegistry[K comparable, F any] struct {
 	entries map[K][]codecRegistryEntry[F]
@@ -440,7 +440,7 @@ NewCodecFactoryForProtocol constructs a codecFactory for a negotiated TTC protoc
 Description:
 
 	Returns a factory that resolves encoders/decoders/OAC makers using the default global registries
-	(EncoderRegistry, DecoderRegistry, OacRegistry) and the provided TTC protocol version.
+	(EncoderRegistry, DecoderRegistry, BindOacRegistry, and DefineOacRegistry) and the provided TTC protocol version.
 
 Parameters:
   - protocolVersion: Negotiated TTC protocol version.
@@ -467,14 +467,14 @@ getEncoder returns the encoder function for a normalized bind value.
 Description:
 
 	Selects the best registered encoder candidate for the bind value type based on the factory's negotiated TTC
-	protocol version. If the bind value is a driver.Out and In is false, NullEncoder is returned. If the bind
-	value is a driver.Out and In is true, encoder lookup is performed using the concrete reflect.Type of Out.Dest.
+	protocol version. OUT-only and nil bind values use the null encoder. For sql.Out values,
+	normalization selects the concrete type of Out.Dest before lookup.
 
 Parameters:
   - normalized: The normalized bind value to encode.
 
 Returns:
-  - encoderFunc: The selected encoder implementation.
+  - *typeEncoder: The selected payload encoder and bind framing implementation.
   - error: Non-nil if no compatible encoder is registered.
 
 Errors:
@@ -569,10 +569,10 @@ Description:
 
 	Selects the best registered OAC constructor candidate for the bind value type based on the factory's
 	negotiated TTC protocol version, then constructs the bind OAC immediately using the supplied maxLength.
-	If the bind value is a driver.Out, the lookup is performed using the concrete reflect.Type of Out.Dest.
+	For sql.Out values, normalization selects the concrete type of Out.Dest before lookup.
 
 Parameters:
-  - bindValue: The bind value for which a bind OAC is requested.
+  - normalized: The normalized bind value for which a bind OAC is requested.
   - maxLength: Maximum length to apply when constructing the bind OAC.
 
 Returns:
