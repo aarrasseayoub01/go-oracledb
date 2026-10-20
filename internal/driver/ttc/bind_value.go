@@ -47,33 +47,23 @@ import (
 	oracleErrors "github.com/oracle/go-oracledb/v26/oracle/errors"
 )
 
-// bindWireFunc writes one encoded bind value into an outgoing TTIRXD message.
+// columnWrapFunc writes one encoded bind payload into an outgoing TTIRXD message.
 // The default implementation uses the ordinary TTC CLR representation.
-type bindWireFunc func(context.Context, driverCommon.Marshaller, driverCommon.MessageType, int, driverCommon.B1Array) error
+type columnWrapFunc func(context.Context, driverCommon.Marshaller, driverCommon.MessageType, int, driverCommon.B1Array) error
 
-// bindValue keeps an encoded bind payload together with the wire representation
-// selected for its Go type.
+// bindValue keeps an encoded bind payload and the normalized value needed to
+// resolve its TTC wrapper when TTIRXD is marshalled.
 type bindValue struct {
-	payload driverCommon.B1Array
-	wire    bindWireFunc
+	normalized normalizedBindValue
+	payload    driverCommon.B1Array
 }
 
-// newCLRBindValue creates a bind value using the ordinary TTC CLR representation.
-func newCLRBindValue(payload driverCommon.B1Array) bindValue {
-	return bindValue{payload: payload, wire: marshalCLRBind}
-}
-
-// marshal writes v with its selected wire representation.
-func (v bindValue) marshal(ctx context.Context, mar driverCommon.Marshaller, msgType driverCommon.MessageType, index int) error {
-	return v.wire(ctx, mar, msgType, index, v.payload)
-}
-
-// marshalCLRBind writes payload as an ordinary TTC CLR bind. A nil payload is
+// wrapCLRColumn writes payload as an ordinary TTC CLR bind. A nil payload is
 // written as TTC's null length indicator.
-func marshalCLRBind(ctx context.Context, mar driverCommon.Marshaller, msgType driverCommon.MessageType, index int, payload driverCommon.B1Array) error {
+func wrapCLRColumn(ctx context.Context, mar driverCommon.Marshaller, msgType driverCommon.MessageType, index int, payload driverCommon.B1Array) error {
 	if payload == nil {
 		if err := mar.MarshalUB1(ctx, driverCommon.UB1(0)); err != nil {
-			common.Odl.Error("marshalCLRBind: failed to write null length indicator",
+			common.Odl.Error("wrapCLRColumn: failed to write null length indicator",
 				"error", err, "message", TTCMsgTypeDescription[msgType], "stage", "null-indicator", "index", index)
 			return common.NewOracleError(oracleErrors.FailMarshal, err, TTCMsgTypeDescription[msgType])
 		}
@@ -81,7 +71,7 @@ func marshalCLRBind(ctx context.Context, mar driverCommon.Marshaller, msgType dr
 	}
 
 	if err := mar.MarshalCLR(ctx, payload, 0, len(payload)); err != nil {
-		common.Odl.Error("marshalCLRBind: failed to write CLR",
+		common.Odl.Error("wrapCLRColumn: failed to write CLR",
 			"error", err, "message", TTCMsgTypeDescription[msgType], "stage", "clr", "index", index)
 		return common.NewOracleError(oracleErrors.FailMarshal, err, TTCMsgTypeDescription[msgType])
 	}

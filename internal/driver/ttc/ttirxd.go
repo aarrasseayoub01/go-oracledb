@@ -145,8 +145,8 @@ setBindValues sets the prepared outgoing bind values for marshalling as an RXD m
 
 Parameters:
 - row: one prepared bind value per bind position for a single row. Each value
-  contains its encoded payload and the wire framing selected for its Go type.
-  Unregistered types use CLR framing; a nil payload is sent as SQL NULL.
+  contains its encoded payload and normalized Go type for resolving the
+  registered transport wrapper.
 */
 
 func (rxd *tTIrxd) setBindValues(row []bindValue) {
@@ -156,9 +156,9 @@ func (rxd *tTIrxd) setBindValues(row []bindValue) {
 /*
 MarshalTo writes the RXD bind payload for outgoing messages (single row).
 
-When used as an outgoing message, tTIrxd delegates each bind value to its selected
-wire representation. The default representation is CLR framing with TTC's null
-length indicator for nil payloads.
+When used as an outgoing message, tTIrxd resolves each bind value's encoder and
+uses its registered transport wrapper. The default wrapper is CLR framing with
+TTC's null length indicator for nil payloads.
 */
 func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine driverCommon.Marshaller) error {
 	// Nothing to marshal if no bind payload was configured.
@@ -166,7 +166,11 @@ func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine driverCommon.Marshaller
 		return nil
 	}
 	for i := range rxd.bindRow {
-		if err := rxd.bindRow[i].marshal(ctx, engine, rxd.GetMsgCode(), i); err != nil {
+		encoder, err := rxd.codecFactory.getEncoder(rxd.bindRow[i].normalized)
+		if err != nil {
+			return err
+		}
+		if err := encoder.wrapColumn(ctx, engine, rxd.GetMsgCode(), i, rxd.bindRow[i].payload); err != nil {
 			return err
 		}
 	}

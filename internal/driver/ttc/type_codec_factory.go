@@ -77,14 +77,14 @@ Description:
 		normalized := normalizeBindValue(bindValue)
 
 		encoder, _ := f.getEncoder(normalized)
-		encoded, _ := encoder.encode(normalized.value)
+		payload, _ := encoder.encode(normalized.value)
 
-		oac, _ := f.getBindOac(normalized, driverCommon.UB4(len(encoded.payload)))
+		oac, _ := f.getBindOac(normalized, driverCommon.UB4(len(payload)))
 		_ = oac // e.g. used to describe bind metadata (type/length) in TTC messages
 
 		// Row/scan path: resolve a decoder for an Oracle database type id.
 		decoder, _ := f.getDecoder(DtyVCS)
-		v, _ := decoder.decodeToType(columnContext{Name: "C1", Index: 0}, encoded.payload)
+		v, _ := decoder.decodeToType(columnContext{Name: "C1", Index: 0}, payload)
 		_ = v // decoded driver.Value (string, number, time.Time, etc.)
 */
 type codecFactory interface {
@@ -101,27 +101,24 @@ type encoderFunc func(driver.Value) (driverCommon.B1Array, error)
 // type and TTC protocol version.
 type typeEncoder struct {
 	encodeToType encoderFunc
-	wire         bindWireFunc
+	wrapColumn   columnWrapFunc
 }
 
 // newTypeEncoder associates a value encoder with its TTIRXD bind framing.
-func newTypeEncoder(encode encoderFunc, wire bindWireFunc) *typeEncoder {
-	return &typeEncoder{encodeToType: encode, wire: wire}
+func newTypeEncoder(encode encoderFunc, wrap columnWrapFunc) *typeEncoder {
+	return &typeEncoder{encodeToType: encode, wrapColumn: wrap}
 }
 
 // newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
 // bind representation.
 func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
-	return newTypeEncoder(encode, marshalCLRBind)
+	return newTypeEncoder(encode, wrapCLRColumn)
 }
 
-// encode prepares the logical payload and preserves the type's selected bind writer.
-func (e *typeEncoder) encode(value driver.Value) (bindValue, error) {
-	payload, err := e.encodeToType(value)
-	if err != nil {
-		return bindValue{}, err
-	}
-	return bindValue{payload: payload, wire: e.wire}, nil
+// encode prepares the logical payload. TTIRXD later resolves this encoder again
+// to apply its selected transport wrapper while marshalling the bind row.
+func (e *typeEncoder) encode(value driver.Value) (driverCommon.B1Array, error) {
+	return e.encodeToType(value)
 }
 
 // decoderFunc defines the signature for TTC decoder implementors registered with the

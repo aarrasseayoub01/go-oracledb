@@ -664,15 +664,15 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 			return err
 		}
 
-		encoded, err := encoder.encode(normalized.value)
+		payload, err := encoder.encode(normalized.value)
 		if err != nil {
 			return err
 		}
-		e.encodedValues[currentRow][i] = encoded
+		e.encodedValues[currentRow][i] = bindValue{normalized: normalized, payload: payload}
 
 		e.currentOacs[i], err = e.shelf.GetCodecFactory().getBindOac(
 			normalized,
-			e.getMaxLengthForOac(i, len(encoded.payload)),
+			e.getMaxLengthForOac(i, len(payload)),
 		)
 		if err != nil {
 			return err

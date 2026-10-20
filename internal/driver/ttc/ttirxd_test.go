@@ -40,6 +40,7 @@ package ttc
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
@@ -100,6 +101,18 @@ func rowToBytes(row []columnPayload) [][]byte {
 	return out
 }
 
+// setCLRBindValues configures an outgoing RXD test message with ordinary CLR
+// payloads. Production RXD messages resolve the same wrapper through the
+// codec factory injected by the message factory.
+func setCLRBindValues(rxd *tTIrxd, payloads ...common.B1Array) {
+	rxd.setCodecFactory(NewCodecFactoryForProtocol(MinTTCProtocolVersion))
+	row := make([]bindValue, len(payloads))
+	for i, payload := range payloads {
+		row[i] = bindValue{normalized: normalizeBindValue(""), payload: payload}
+	}
+	rxd.setBindValues(row)
+}
+
 // TestTTIrxd_GetMsgCode verifies that GetMsgCode returns TTIRXD for tTIrxd message.
 func TestTTIrxd_GetMsgCode(t *testing.T) {
 	t.Parallel()
@@ -118,7 +131,7 @@ func TestTTIrxd_MarshalTo_Success(t *testing.T) {
 
 	// Encoded bind data set before calling MarshalTo (nil, then 3-byte value)
 	val := common.B1Array{0x01, 0x02, 0x03}
-	rxd.setBindValues([]bindValue{newCLRBindValue(nil), newCLRBindValue(val)})
+	setCLRBindValues(rxd, nil, val)
 
 	// Use ArrayBasedDataBuffer via NewMarshalEngineTest so we can inspect bytes directly
 	buf, eng := NewMarshalEngineTest(common.BIG_ENDIAN, B2, Universal, 64)
@@ -140,11 +153,15 @@ func TestTTIrxd_MarshalTo_Success(t *testing.T) {
 func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
-	rxd.setBindValues([]bindValue{{
-		payload: common.B1Array{0x01, 0x02, 0x03},
-		wire: func(ctx context.Context, mar common.Marshaller, _ common.MessageType, _ int, _ common.B1Array) error {
+	rxd.setCodecFactory(&testCodecFactory{encoder: newTypeEncoder(
+		func(driver.Value) (common.B1Array, error) { return nil, nil },
+		func(ctx context.Context, mar common.Marshaller, _ common.MessageType, _ int, _ common.B1Array) error {
 			return mar.MarshalUB1(ctx, 0x7F)
 		},
+	)})
+	rxd.setBindValues([]bindValue{{
+		normalized: normalizeBindValue(""),
+		payload:    common.B1Array{0x01, 0x02, 0x03},
 	}})
 
 	buf, eng := NewMarshalEngineTest(common.BIG_ENDIAN, B2, Universal, 64)
@@ -162,7 +179,7 @@ func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 func TestTTIrxd_MarshalTo_FailOnNullIndicator(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
-	rxd.setBindValues([]bindValue{newCLRBindValue(nil)})
+	setCLRBindValues(rxd, nil)
 
 	// Fail the first WriteByteWithContext call (which writes the null indicator)
 	mar := createMarshaller(make([]byte, 8), failOnWriteByte, 1)
@@ -186,7 +203,7 @@ func TestTTIrxd_MarshalTo_FailOnNullIndicator(t *testing.T) {
 func TestTTIrxd_MarshalTo_FailOnCLRDataWrite(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
-	rxd.setBindValues([]bindValue{newCLRBindValue(common.B1Array{0xAA, 0xBB, 0xCC})})
+	setCLRBindValues(rxd, common.B1Array{0xAA, 0xBB, 0xCC})
 
 	// First WriteBytesWithContext call should fail (after successful length byte write)
 	mar := createMarshaller(make([]byte, 8), failOnWriteBytes, 1)

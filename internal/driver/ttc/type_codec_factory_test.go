@@ -155,8 +155,8 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected encode error: %v", err)
 			}
-			if !reflect.DeepEqual(got.payload, tc.wantValue) {
-				t.Fatalf("returned encoder mismatch: got %v want %v", got.payload, tc.wantValue)
+			if !reflect.DeepEqual(got, tc.wantValue) {
+				t.Fatalf("returned encoder mismatch: got %v want %v", got, tc.wantValue)
 			}
 		})
 	}
