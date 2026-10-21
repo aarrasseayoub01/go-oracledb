@@ -51,11 +51,9 @@ import (
 // The default implementation uses the ordinary TTC CLR representation.
 type columnWrapFunc func(context.Context, driverCommon.Marshaller, driverCommon.MessageType, int, driverCommon.B1Array) error
 
-// bindValue keeps an encoded bind payload and the normalized value needed to
-// resolve its TTC wrapper when TTIRXD is marshalled.
+// bindValue keeps one encoded bind payload until TTIRXD marshals its row.
 type bindValue struct {
-	normalized normalizedBindValue
-	payload    driverCommon.B1Array
+	payload driverCommon.B1Array
 }
 
 // wrapCLRColumn writes payload as an ordinary TTC CLR bind. A nil payload is

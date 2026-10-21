@@ -115,8 +115,8 @@ func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
 	return newTypeEncoder(encode, wrapCLRColumn)
 }
 
-// encode prepares the logical payload. TTIRXD later resolves this encoder again
-// to apply its selected transport wrapper while marshalling the bind row.
+// encode prepares the logical payload. The statement executor retains this
+// encoder's transport wrapper for TTIRXD to use while marshalling the bind row.
 func (e *typeEncoder) encode(value driver.Value) (driverCommon.B1Array, error) {
 	return e.encodeToType(value)
 }

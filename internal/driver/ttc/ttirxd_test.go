@@ -40,7 +40,6 @@ package ttc
 
 import (
 	"context"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
@@ -105,12 +104,13 @@ func rowToBytes(row []columnPayload) [][]byte {
 // payloads. Production RXD messages resolve the same wrapper through the
 // codec factory injected by the message factory.
 func setCLRBindValues(rxd *tTIrxd, payloads ...common.B1Array) {
-	rxd.setCodecFactory(NewCodecFactoryForProtocol(MinTTCProtocolVersion))
 	row := make([]bindValue, len(payloads))
+	wrapColumns := make([]columnWrapFunc, len(payloads))
 	for i, payload := range payloads {
-		row[i] = bindValue{normalized: normalizeBindValue(""), payload: payload}
+		row[i] = bindValue{payload: payload}
+		wrapColumns[i] = wrapCLRColumn
 	}
-	rxd.setBindValues(row)
+	rxd.setBindValues(row, wrapColumns)
 }
 
 // TestTTIrxd_GetMsgCode verifies that GetMsgCode returns TTIRXD for tTIrxd message.
@@ -153,16 +153,11 @@ func TestTTIrxd_MarshalTo_Success(t *testing.T) {
 func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
-	rxd.setCodecFactory(&testCodecFactory{encoder: newTypeEncoder(
-		func(driver.Value) (common.B1Array, error) { return nil, nil },
+	rxd.setBindValues([]bindValue{{payload: common.B1Array{0x01, 0x02, 0x03}}}, []columnWrapFunc{
 		func(ctx context.Context, mar common.Marshaller, _ common.MessageType, _ int, _ common.B1Array) error {
 			return mar.MarshalUB1(ctx, 0x7F)
 		},
-	)})
-	rxd.setBindValues([]bindValue{{
-		normalized: normalizeBindValue(""),
-		payload:    common.B1Array{0x01, 0x02, 0x03},
-	}})
+	})
 
 	buf, eng := NewMarshalEngineTest(common.BIG_ENDIAN, B2, Universal, 64)
 	if err := rxd.MarshalTo(context.Background(), eng); err != nil {

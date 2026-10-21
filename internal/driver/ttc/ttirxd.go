@@ -67,8 +67,9 @@ type tTIrxd struct {
 	// bvcFound is true if BVC/column-carry logic applies to the current row (if bvcColSent has any set columns).
 	bvcFound bool
 
-	// Outgoing bind payload for TTIRXD when marshalling bind values (Phase 1: single row binds).
+	// Outgoing bind payload and TTC wrappers for TTIRXD bind-row marshalling.
 	bindRow        []bindValue
+	wrapColumns    []columnWrapFunc
 	columnContexts []columnContext
 
 	numberOfReturningPositions int
@@ -145,32 +146,32 @@ setBindValues sets the prepared outgoing bind values for marshalling as an RXD m
 
 Parameters:
 - row: one prepared bind value per bind position for a single row. Each value
-  contains its encoded payload and normalized Go type for resolving the
-  registered transport wrapper.
+  contains its encoded payload.
+- wrapColumns: one transport wrapper per bind position, aligned with row.
 */
 
-func (rxd *tTIrxd) setBindValues(row []bindValue) {
+func (rxd *tTIrxd) setBindValues(row []bindValue, wrapColumns []columnWrapFunc) {
 	rxd.bindRow = row
+	rxd.wrapColumns = wrapColumns
 }
 
 /*
 MarshalTo writes the RXD bind payload for outgoing messages (single row).
 
-When used as an outgoing message, tTIrxd resolves each bind value's encoder and
-uses its registered transport wrapper. The default wrapper is CLR framing with
-TTC's null length indicator for nil payloads.
+When used as an outgoing message, tTIrxd uses the transport wrappers prepared
+by the statement executor. The default wrapper is CLR framing with TTC's null
+length indicator for nil payloads.
 */
 func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine driverCommon.Marshaller) error {
 	// Nothing to marshal if no bind payload was configured.
 	if rxd.bindRow == nil {
 		return nil
 	}
+	if len(rxd.wrapColumns) != len(rxd.bindRow) {
+		return common.NewOracleError(oracleErrors.InternalError, nil)
+	}
 	for i := range rxd.bindRow {
-		encoder, err := rxd.codecFactory.getEncoder(rxd.bindRow[i].normalized)
-		if err != nil {
-			return err
-		}
-		if err := encoder.wrapColumn(ctx, engine, rxd.GetMsgCode(), i, rxd.bindRow[i].payload); err != nil {
+		if err := rxd.wrapColumns[i](ctx, engine, rxd.GetMsgCode(), i, rxd.bindRow[i].payload); err != nil {
 			return err
 		}
 	}

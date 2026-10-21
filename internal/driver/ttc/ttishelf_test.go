@@ -271,16 +271,12 @@ func TestTTIShelf_RegisterProviderRegistry_ReplacesExistingRegistry(t *testing.T
 
 type testCodecFactory struct {
 	encode    driverCommon.B1Array
-	encoder   *typeEncoder
 	decode    driver.Value
 	bindOac   driverCommon.Marshallable
 	defineOac driverCommon.Marshallable
 }
 
 func (t *testCodecFactory) getEncoder(_ normalizedBindValue) (*typeEncoder, error) {
-	if t.encoder != nil {
-		return t.encoder, nil
-	}
 	return newCLRBindEncoder(func(driver.Value) (driverCommon.B1Array, error) { return t.encode, nil }), nil
 }
 func (t *testCodecFactory) getDecoder(_ DtyType) (*typeDecoder, error) {
