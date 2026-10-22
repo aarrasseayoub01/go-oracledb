@@ -736,67 +736,87 @@ func init() {
 	// ========================= TYPE CODEC Registry =========================
 	// Register default encoders.
 	numberEncoder := newCLRBindEncoder(converters.EncodeNumber)
-	if err := EncoderRegistry.Register(reflect.TypeOf(""), DtyVCS, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeVarchar)); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(""), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeVarchar)); err != nil {
 		common.Odl.Warn("Failed to register string encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(int16(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(int16(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeInt)); err != nil {
 		common.Odl.Warn("Failed to register int16 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(int32(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(int32(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeInt)); err != nil {
 		common.Odl.Warn("Failed to register int32 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(int(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(int(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeInt)); err != nil {
 		common.Odl.Warn("Failed to register int encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(int64(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(int64(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeInt)); err != nil {
 		common.Odl.Warn("Failed to register int64 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(int8(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(int8(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeInt)); err != nil {
 		common.Odl.Warn("Failed to register int8 encoder", "error", err)
 	}
 
-	if err := EncoderRegistry.Register(reflect.TypeOf(uint8(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(uint8(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeUInt)); err != nil {
 		common.Odl.Warn("Failed to register uint8 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(uint16(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(uint16(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeUInt)); err != nil {
 		common.Odl.Warn("Failed to register uint16 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(uint32(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(uint32(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeUInt)); err != nil {
 		common.Odl.Warn("Failed to register uint32 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(uint(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(uint(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeUInt)); err != nil {
 		common.Odl.Warn("Failed to register uint encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(uint64(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(uint64(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeUInt)); err != nil {
 		common.Odl.Warn("Failed to register uint64 encoder", "error", err)
 	}
 
-	if err := EncoderRegistry.Register(reflect.TypeOf(float32(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(float32(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeFloat)); err != nil {
 		common.Odl.Warn("Failed to register float32 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(float64(0)), DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(float64(0)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeFloat)); err != nil {
 		common.Odl.Warn("Failed to register float64 encoder", "error", err)
 	}
-	if err := EncoderRegistry.Register(reflect.TypeOf(time.Time{}), DtyStz, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeTimestampWithTimeZone)); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(time.Time{}), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeTimestampWithTimeZone)); err != nil {
 		common.Odl.Warn("Failed to register time.Time encoder", "error", err)
 	}
 
-	if err := EncoderRegistry.Register(reflect.TypeOf([]byte(nil)), DtyVbi, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBinary)); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf([]byte(nil)), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBinary)); err != nil {
 		common.Odl.Warn("Failed to register []byte encoder", "error", err)
 	}
 
-	if err := EncoderRegistry.Register(reflect.TypeOf(nil), dtyNoType, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeNull)); err != nil {
+	if err := EncoderRegistry.Register(reflect.TypeOf(nil), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeNull)); err != nil {
 		common.Odl.Warn("Failed to register nil encoder", "error", err)
 	}
 
 	// bool is version dependent
-	err = EncoderRegistry.Register(reflect.TypeOf(true), DtyBol, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBooleanAsNumber))
+	err = EncoderRegistry.Register(reflect.TypeOf(true), MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBooleanAsNumber))
 	if err != nil {
 		common.Odl.Warn("Failed to register string bool (v<=17) encoder", "error", err)
 	}
-	err = EncoderRegistry.Register(reflect.TypeOf(true), DtyBol, 18, newCLRBindEncoder(converters.EncodeBoolean))
+	err = EncoderRegistry.Register(reflect.TypeOf(true), 18, newCLRBindEncoder(converters.EncodeBoolean))
 	if err != nil {
 		common.Odl.Warn("Failed to register string bool (v>=18) encoder", "error", err)
+	}
+
+	// Register canonical scalar encoders for ADT attributes and collection elements.
+	if err := DtyEncoderRegistry.Register(DtyVCS, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeVarchar)); err != nil {
+		common.Odl.Warn("Failed to register VARCHAR encoder", "error", err)
+	}
+	if err := DtyEncoderRegistry.Register(DtyNum, MinTTCProtocolVersion, numberEncoder); err != nil {
+		common.Odl.Warn("Failed to register NUMBER encoder", "error", err)
+	}
+	if err := DtyEncoderRegistry.Register(DtyStz, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeTimestampWithTimeZone)); err != nil {
+		common.Odl.Warn("Failed to register timestamp-with-time-zone encoder", "error", err)
+	}
+	if err := DtyEncoderRegistry.Register(DtyVbi, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBinary)); err != nil {
+		common.Odl.Warn("Failed to register RAW encoder", "error", err)
+	}
+	if err := DtyEncoderRegistry.Register(DtyBol, MinTTCProtocolVersion, newCLRBindEncoder(converters.EncodeBooleanAsNumber)); err != nil {
+		common.Odl.Warn("Failed to register pre-native BOOLEAN encoder", "error", err)
+	}
+	if err := DtyEncoderRegistry.Register(DtyBol, 18, newCLRBindEncoder(converters.EncodeBoolean)); err != nil {
+		common.Odl.Warn("Failed to register native BOOLEAN encoder", "error", err)
 	}
 
 	// Register default decoders with explicit wire readers. Scalar types use CLR;

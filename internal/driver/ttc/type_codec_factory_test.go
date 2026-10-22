@@ -88,7 +88,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 		name        string
 		protocol    int8
 		value       driver.Value
-		setup       func(reg *encoderRegistry)
+		setup       func(reg *codecRegistry[reflect.Type, *typeEncoder])
 		wantValue   common.B1Array
 		expectError bool
 		errCode     oracleErrors.ErrorCode
@@ -99,9 +99,9 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:     "selects highest version within protocol",
 			protocol: 3,
 			value:    int64(0),
-			setup: func(reg *encoderRegistry) {
-				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 1, newCLRBindEncoder(dummyEncoderA))
-				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 3, newCLRBindEncoder(dummyEncoderB))
+			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
+				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
 			},
 			wantValue: common.B1Array{1, 2, 3},
 		},
@@ -109,8 +109,8 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:     "skips candidates greater than protocol",
 			protocol: 1,
 			value:    int64(0),
-			setup: func(reg *encoderRegistry) {
-				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 2, newCLRBindEncoder(dummyEncoderB))
+			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
@@ -119,7 +119,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:        "no registered encoder",
 			protocol:    1,
 			value:       "",
-			setup:       func(reg *encoderRegistry) {},
+			setup:       func(reg *codecRegistry[reflect.Type, *typeEncoder]) {},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
 		},
@@ -127,7 +127,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			encReg := newEncoderRegistry()
+			encReg := newCodecRegistry[reflect.Type, *typeEncoder]()
 			if tc.setup != nil {
 				tc.setup(encReg)
 			}
@@ -167,11 +167,11 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 func TestCodecFactory_getEncoderForDtyType(t *testing.T) {
 	t.Parallel()
 
-	registry := newEncoderRegistry()
-	if err := registry.Register(reflect.TypeOf(int64(0)), DtyNum, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
+	registry := newCodecRegistry[DtyType, *typeEncoder]()
+	if err := registry.Register(DtyNum, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
 		t.Fatalf("register NUMBER encoder: %v", err)
 	}
-	factory := &CodecFactoryImpl{ttcVersion: 1, encoders: registry}
+	factory := &CodecFactoryImpl{ttcVersion: 1, dtyEncoders: registry}
 	encoder, err := factory.getEncoderForDtyType(DtyNum)
 	if err != nil {
 		t.Fatalf("get NUMBER encoder: %v", err)

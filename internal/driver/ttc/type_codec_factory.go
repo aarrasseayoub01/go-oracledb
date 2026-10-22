@@ -392,45 +392,13 @@ func (r *codecRegistry[K, F]) getCandidates(key K) []codecRegistryEntry[F] {
 	return nil
 }
 
-const dtyNoType DtyType = -1
+// EncoderRegistry is the global registry for normal bind encoders keyed by Go
+// type. Populate it during package init of encoder implementors.
+var EncoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
 
-// encoderRegistry keeps the normal Go-type lookup and a second lookup for
-// ADT element types declared by Oracle metadata.
-type encoderRegistry struct {
-	byGoType  *codecRegistry[reflect.Type, *typeEncoder]
-	byDtyType *codecRegistry[DtyType, *typeEncoder]
-}
-
-func newEncoderRegistry() *encoderRegistry {
-	return &encoderRegistry{
-		byGoType:  newCodecRegistry[reflect.Type, *typeEncoder](),
-		byDtyType: newCodecRegistry[DtyType, *typeEncoder](),
-	}
-}
-
-// Register associates an encoder with its ordinary Go bind type and, when dty
-// is provided, with the Oracle type used by ADT elements.
-func (r *encoderRegistry) Register(goType reflect.Type, dty DtyType, fromTTCProtocolVersion int8, encoder *typeEncoder) error {
-	if err := r.byGoType.Register(goType, fromTTCProtocolVersion, encoder); err != nil {
-		return err
-	}
-	if dty == dtyNoType {
-		return nil
-	}
-	return r.byDtyType.Register(dty, fromTTCProtocolVersion, encoder)
-}
-
-func (r *encoderRegistry) getGoTypeCandidates(goType reflect.Type) []codecRegistryEntry[*typeEncoder] {
-	return r.byGoType.getCandidates(goType)
-}
-
-func (r *encoderRegistry) getDtyTypeCandidates(dty DtyType) []codecRegistryEntry[*typeEncoder] {
-	return r.byDtyType.getCandidates(dty)
-}
-
-// EncoderRegistry is the global registry for encoders keyed by Go type and
-// by Oracle DtyType for ADT elements. Populate it during package init.
-var EncoderRegistry = newEncoderRegistry()
+// DtyEncoderRegistry is the global registry for scalar ADT element encoders
+// keyed by their declared Oracle TTC datatype.
+var DtyEncoderRegistry = newCodecRegistry[DtyType, *typeEncoder]()
 
 // DecoderRegistry is the global registry for decoders keyed by Oracle database type.
 var DecoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
@@ -448,17 +416,19 @@ CodecFactoryImpl is the codecFactory implementation used by TTC to resolve encod
 Description:
 
 	Uses the negotiated TTC protocol version to select the "best" registered implementation candidate from:
-	- EncoderRegistry (Go reflect.Type or Oracle DtyType -> typeEncoder)
+	- EncoderRegistry (Go reflect.Type -> typeEncoder)
+	- DtyEncoderRegistry (Oracle DtyType -> typeEncoder)
 	- DecoderRegistry (Oracle db type id -> decoderFunc)
 	- BindOacRegistry (Go reflect.Type -> bindOacType)
 	- DefineOacRegistry (Oracle db type id -> defineOacFunc)
 */
 type CodecFactoryImpl struct {
-	ttcVersion int8
-	encoders   *encoderRegistry
-	decoders   *codecRegistry[DtyType, *typeDecoder]
-	bindOacs   *codecRegistry[reflect.Type, bindOacType]
-	defineOacs *codecRegistry[DtyType, defineOacFunc]
+	ttcVersion  int8
+	encoders    *codecRegistry[reflect.Type, *typeEncoder]
+	dtyEncoders *codecRegistry[DtyType, *typeEncoder]
+	decoders    *codecRegistry[DtyType, *typeDecoder]
+	bindOacs    *codecRegistry[reflect.Type, bindOacType]
+	defineOacs  *codecRegistry[DtyType, defineOacFunc]
 }
 
 /*
@@ -467,7 +437,7 @@ NewCodecFactoryForProtocol constructs a codecFactory for a negotiated TTC protoc
 Description:
 
 	Returns a factory that resolves encoders/decoders/OAC makers using the default global registries
-	(EncoderRegistry, DecoderRegistry, BindOacRegistry, and DefineOacRegistry) and the provided TTC protocol version.
+	(EncoderRegistry, DtyEncoderRegistry, DecoderRegistry, BindOacRegistry, and DefineOacRegistry) and the provided TTC protocol version.
 
 Parameters:
   - protocolVersion: Negotiated TTC protocol version.
@@ -480,11 +450,12 @@ Errors:
 */
 func NewCodecFactoryForProtocol(protocolVersion int8) codecFactory {
 	return &CodecFactoryImpl{
-		ttcVersion: protocolVersion,
-		encoders:   EncoderRegistry,
-		decoders:   DecoderRegistry,
-		bindOacs:   BindOacRegistry,
-		defineOacs: DefineOacRegistry,
+		ttcVersion:  protocolVersion,
+		encoders:    EncoderRegistry,
+		dtyEncoders: DtyEncoderRegistry,
+		decoders:    DecoderRegistry,
+		bindOacs:    BindOacRegistry,
+		defineOacs:  DefineOacRegistry,
 	}
 }
 
@@ -513,7 +484,7 @@ func (f *CodecFactoryImpl) getEncoderForGoType(normalized normalizedBindValue) (
 	}
 	common.Odl.Finest("New encoder requested", "goType", normalized.goType)
 
-	candidates := f.encoders.getGoTypeCandidates(normalized.goType)
+	candidates := f.encoders.getCandidates(normalized.goType)
 	bestCandidate := getEntryFromRegistry(f.ttcVersion, candidates)
 	if bestCandidate != nil {
 		common.Odl.Finest("Encoder returned", "candidate", bestCandidate)
@@ -529,7 +500,7 @@ func (f *CodecFactoryImpl) getEncoderForGoType(normalized normalizedBindValue) (
 // element type. ADT bind code resolves and retains these encoders while it
 // constructs its own payload.
 func (f *CodecFactoryImpl) getEncoderForDtyType(dty DtyType) (*typeEncoder, error) {
-	candidates := f.encoders.getDtyTypeCandidates(dty)
+	candidates := f.dtyEncoders.getCandidates(dty)
 	bestCandidate := getEntryFromRegistry(f.ttcVersion, candidates)
 	if bestCandidate != nil {
 		common.Odl.Finest("DtyType encoder returned", "dtyType", dty, "candidate", bestCandidate)
