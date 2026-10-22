@@ -132,7 +132,7 @@ type statementProcessor struct {
 	opts          driverCommon.UB4                    // OALL8 option bitmask (parse/execute/commit/no-PLSQL/binds-present flags etc).
 	al8i4         []driverCommon.UB4                  // AL8I4 options vector attached to OALL8 (iterations, select flag, extra protocol flags).
 	bindValues    []any                               // Original bind values (ordered by position) for the current execution.
-	encodedValues [][]bindValue                       // Prepared bind values per iteration (each inner slice is a TTIRXD bind row).
+	encodedValues [][]driverCommon.B1Array            // Encoded bind payloads per iteration (each inner slice is a TTIRXD bind row).
 	wrapColumns   [][]columnWrapFunc                  // TTC bind wrappers per iteration, aligned with encodedValues.
 	currentOacs   []driverCommon.Marshallable         // Per-bind OAC descriptors (type/size metadata) sent alongside bind values.
 	previousOacs  []driverCommon.Marshallable         // Cached OACs from previous execution of the statement
@@ -651,10 +651,10 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 	e.bindValues = make([]any, n)
 	// TODO : currently, just do it for single row, later when
 	//        batching support is added, make it dynamic.
-	e.encodedValues = make([][]bindValue, 1)
+	e.encodedValues = make([][]driverCommon.B1Array, 1)
 	e.wrapColumns = make([][]columnWrapFunc, 1)
 	currentRow := 0
-	e.encodedValues[currentRow] = make([]bindValue, n)
+	e.encodedValues[currentRow] = make([]driverCommon.B1Array, n)
 	e.wrapColumns[currentRow] = make([]columnWrapFunc, n)
 	e.currentOacs = make([]driverCommon.Marshallable, n)
 	for i, v := range args {
@@ -671,7 +671,7 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 		if err != nil {
 			return err
 		}
-		e.encodedValues[currentRow][i] = bindValue{payload: payload}
+		e.encodedValues[currentRow][i] = payload
 		e.wrapColumns[currentRow][i] = encoder.wrapColumn
 
 		e.currentOacs[i], err = e.shelf.GetCodecFactory().getBindOac(

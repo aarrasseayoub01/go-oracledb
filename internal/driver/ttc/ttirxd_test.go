@@ -104,10 +104,10 @@ func rowToBytes(row []columnPayload) [][]byte {
 // payloads. Production RXD messages resolve the same wrapper through the
 // codec factory injected by the message factory.
 func setCLRBindValues(rxd *tTIrxd, payloads ...common.B1Array) {
-	row := make([]bindValue, len(payloads))
+	row := make([]common.B1Array, len(payloads))
 	wrapColumns := make([]columnWrapFunc, len(payloads))
 	for i, payload := range payloads {
-		row[i] = bindValue{payload: payload}
+		row[i] = payload
 		wrapColumns[i] = wrapCLRColumn
 	}
 	rxd.setBindValues(row, wrapColumns)
@@ -153,7 +153,7 @@ func TestTTIrxd_MarshalTo_Success(t *testing.T) {
 func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
-	rxd.setBindValues([]bindValue{{payload: common.B1Array{0x01, 0x02, 0x03}}}, []columnWrapFunc{
+	rxd.setBindValues([]common.B1Array{{0x01, 0x02, 0x03}}, []columnWrapFunc{
 		func(ctx context.Context, mar common.Marshaller, _ common.B1Array) error {
 			return mar.MarshalUB1(ctx, 0x7F)
 		},

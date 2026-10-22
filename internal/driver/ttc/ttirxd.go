@@ -68,7 +68,7 @@ type tTIrxd struct {
 	bvcFound bool
 
 	// Outgoing bind payload and TTC wrappers for TTIRXD bind-row marshalling.
-	bindRow        []bindValue
+	bindRow        []driverCommon.B1Array
 	wrapColumns    []columnWrapFunc
 	columnContexts []columnContext
 
@@ -150,7 +150,7 @@ Parameters:
 - wrapColumns: one transport wrapper per bind position, aligned with row.
 */
 
-func (rxd *tTIrxd) setBindValues(row []bindValue, wrapColumns []columnWrapFunc) {
+func (rxd *tTIrxd) setBindValues(row []driverCommon.B1Array, wrapColumns []columnWrapFunc) {
 	rxd.bindRow = row
 	rxd.wrapColumns = wrapColumns
 }
@@ -171,7 +171,7 @@ func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine driverCommon.Marshaller
 		return common.NewOracleError(oracleErrors.InternalError, nil)
 	}
 	for i := range rxd.bindRow {
-		if err := rxd.wrapColumns[i](ctx, engine, rxd.bindRow[i].payload); err != nil {
+		if err := rxd.wrapColumns[i](ctx, engine, rxd.bindRow[i]); err != nil {
 			return err
 		}
 	}

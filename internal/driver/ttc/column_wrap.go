@@ -73,11 +73,6 @@ func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
 	return newTypeEncoder(encode, wrapCLRColumn)
 }
 
-// bindValue keeps one encoded bind payload until TTIRXD marshals its row.
-type bindValue struct {
-	payload driverCommon.B1Array
-}
-
 // wrapCLRColumn writes payload as an ordinary TTC CLR bind. A nil payload is
 // written as TTC's null length indicator.
 func wrapCLRColumn(ctx context.Context, mar driverCommon.Marshaller, payload driverCommon.B1Array) error {
