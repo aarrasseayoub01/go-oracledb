@@ -88,7 +88,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 		name        string
 		protocol    int8
 		value       driver.Value
-		setup       func(reg *codecRegistry[reflect.Type, *typeEncoder])
+		setup       func(reg *encoderRegistry)
 		wantValue   common.B1Array
 		expectError bool
 		errCode     oracleErrors.ErrorCode
@@ -99,7 +99,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:     "selects highest version within protocol",
 			protocol: 3,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+			setup: func(reg *encoderRegistry) {
 				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
 				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
 			},
@@ -109,7 +109,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:     "skips candidates greater than protocol",
 			protocol: 1,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
+			setup: func(reg *encoderRegistry) {
 				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
@@ -119,7 +119,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			name:        "no registered encoder",
 			protocol:    1,
 			value:       "",
-			setup:       func(reg *codecRegistry[reflect.Type, *typeEncoder]) {},
+			setup:       func(reg *encoderRegistry) {},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
 		},
@@ -127,7 +127,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			encReg := newCodecRegistry[reflect.Type, *typeEncoder]()
+			encReg := newEncoderRegistry()
 			if tc.setup != nil {
 				tc.setup(encReg)
 			}
@@ -159,6 +159,58 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 				t.Fatalf("returned encoder mismatch: got %v want %v", got, tc.wantValue)
 			}
 		})
+	}
+}
+
+type nestedEncoderTestValue struct {
+	element     driver.Value
+	elementType declaredOracleType
+}
+
+// TestCodecFactory_getNestedEncoderUsesDeclaredOracleType verifies that an
+// encoder builder can resolve a child encoder with Oracle type metadata. This
+// lets an ADT encoder distinguish, for example, NUMBER from BINARY_DOUBLE even
+// when the Go values have the same concrete type.
+func TestCodecFactory_getNestedEncoderUsesDeclaredOracleType(t *testing.T) {
+	t.Parallel()
+
+	registry := newEncoderRegistry()
+	declared := declaredOracleType{dataType: DtyNum, typeName: "SCHEMA.NUMBER_ARRAY"}
+	if err := registry.Register(reflect.TypeOf(""), 1, newCLRBindEncoder(func(driver.Value) (common.B1Array, error) {
+		return common.B1Array("fallback"), nil
+	})); err != nil {
+		t.Fatalf("register fallback encoder: %v", err)
+	}
+	if err := registry.RegisterForDeclaredType(reflect.TypeOf(""), declared, 1, newCLRBindEncoder(func(driver.Value) (common.B1Array, error) {
+		return common.B1Array("declared"), nil
+	})); err != nil {
+		t.Fatalf("register declared-type encoder: %v", err)
+	}
+	if err := registry.Register(reflect.TypeOf(nestedEncoderTestValue{}), 1, func(resolver encoderResolver) *typeEncoder {
+		return newTypeEncoder(func(value driver.Value) (common.B1Array, error) {
+			nested := value.(nestedEncoderTestValue)
+			encoder, err := resolver.getNestedEncoder(nested.element, nested.elementType)
+			if err != nil {
+				return nil, err
+			}
+			return encoder.encodeToType(nested.element)
+		}, wrapCLRColumn)
+	}); err != nil {
+		t.Fatalf("register container encoder: %v", err)
+	}
+
+	factory := &CodecFactoryImpl{ttcVersion: 1, encoders: registry}
+	value := nestedEncoderTestValue{element: "value", elementType: declared}
+	encoder, err := factory.getEncoder(normalizeBindValue(value))
+	if err != nil {
+		t.Fatalf("get container encoder: %v", err)
+	}
+	got, err := encoder.encodeToType(value)
+	if err != nil {
+		t.Fatalf("encode nested value: %v", err)
+	}
+	if string(got) != "declared" {
+		t.Fatalf("nested encoder = %q, want declared-type encoder", got)
 	}
 }
 

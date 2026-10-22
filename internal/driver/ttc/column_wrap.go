@@ -49,8 +49,10 @@ import (
 
 // newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
 // bind representation.
-func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
-	return newTypeEncoder(encode, wrapCLRColumn)
+func newCLRBindEncoder(encode encoderFunc) encoderBuilder {
+	return func(encoderResolver) *typeEncoder {
+		return newTypeEncoder(encode, wrapCLRColumn)
+	}
 }
 
 // wrapCLRColumn writes payload as an ordinary TTC CLR bind. A nil payload is

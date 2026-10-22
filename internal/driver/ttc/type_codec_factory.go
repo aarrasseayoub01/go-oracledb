@@ -95,6 +95,25 @@ type codecFactory interface {
 	getDefineOac(DtyType, columnContext, driverCommon.DriverProperties) driverCommon.Marshallable
 }
 
+// declaredOracleType identifies the declared Oracle type of a nested value.
+// typeName distinguishes named types that share the same TTC datatype.
+type declaredOracleType struct {
+	dataType DtyType
+	typeName string
+}
+
+// encoderResolver resolves child encoders for values nested inside an ADT.
+// The declared type lets collection encoders select an element representation
+// independently of the Go value's concrete type.
+type encoderResolver interface {
+	getNestedEncoder(driver.Value, declaredOracleType) (*typeEncoder, error)
+}
+
+// encoderBuilder constructs a per-factory encoder. Builders may capture the
+// resolver for nested ADT values without storing a connection-specific factory
+// in the global encoder registry.
+type encoderBuilder func(encoderResolver) *typeEncoder
+
 // encoderFunc encodes a Go bind value into its logical payload bytes.
 type encoderFunc func(driver.Value) (driverCommon.B1Array, error)
 
@@ -107,6 +126,13 @@ type columnWrapFunc func(context.Context, driverCommon.Marshaller, driverCommon.
 type typeEncoder struct {
 	encodeToType encoderFunc
 	wrapColumn   columnWrapFunc
+}
+
+// encoderRegistryKey selects an encoder by Go value type and, when present,
+// the declared Oracle type of a nested value.
+type encoderRegistryKey struct {
+	goType   reflect.Type
+	declared declaredOracleType
 }
 
 // newTypeEncoder associates a value encoder with its TTIRXD bind framing.
@@ -391,9 +417,34 @@ func (r *codecRegistry[K, F]) getCandidates(key K) []codecRegistryEntry[F] {
 	return nil
 }
 
-// EncoderRegistry is the global registry for encoders keyed by Go type.
+// encoderRegistry stores encoder builders keyed by Go type and optional
+// declared Oracle type metadata.
+type encoderRegistry struct {
+	registry *codecRegistry[encoderRegistryKey, encoderBuilder]
+}
+
+func newEncoderRegistry() *encoderRegistry {
+	return &encoderRegistry{registry: newCodecRegistry[encoderRegistryKey, encoderBuilder]()}
+}
+
+// Register adds a Go-type encoder builder for ordinary top-level binds.
+func (r *encoderRegistry) Register(goType reflect.Type, fromTTCProtocolVersion int8, builder encoderBuilder) error {
+	return r.registry.Register(encoderRegistryKey{goType: goType}, fromTTCProtocolVersion, builder)
+}
+
+// RegisterForDeclaredType adds a nested encoder builder for a specific declared
+// Oracle type. It takes precedence over the Go-type-only encoder for ADT values.
+func (r *encoderRegistry) RegisterForDeclaredType(goType reflect.Type, declared declaredOracleType, fromTTCProtocolVersion int8, builder encoderBuilder) error {
+	return r.registry.Register(encoderRegistryKey{goType: goType, declared: declared}, fromTTCProtocolVersion, builder)
+}
+
+func (r *encoderRegistry) getCandidates(key encoderRegistryKey) []codecRegistryEntry[encoderBuilder] {
+	return r.registry.getCandidates(key)
+}
+
+// EncoderRegistry is the global registry for encoder builders keyed by Go type.
 // Populate it during package init of encoder implementors.
-var EncoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
+var EncoderRegistry = newEncoderRegistry()
 
 // DecoderRegistry is the global registry for decoders keyed by Oracle database type.
 var DecoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
@@ -418,7 +469,7 @@ Description:
 */
 type CodecFactoryImpl struct {
 	ttcVersion int8
-	encoders   *codecRegistry[reflect.Type, *typeEncoder]
+	encoders   *encoderRegistry
 	decoders   *codecRegistry[DtyType, *typeDecoder]
 	bindOacs   *codecRegistry[reflect.Type, bindOacType]
 	defineOacs *codecRegistry[DtyType, defineOacFunc]
@@ -471,20 +522,34 @@ Errors:
   - Returns a common.OracleError with code common.InternalError when no encoder candidate exists for the bind type.
 */
 func (f *CodecFactoryImpl) getEncoder(normalized normalizedBindValue) (*typeEncoder, error) {
-	if normalized.isOutOnly || normalized.value == nil {
-		return newCLRBindEncoder(converters.EncodeNull), nil
-	}
-	common.Odl.Finest("New encoder requested", "goType", normalized.goType)
+	return f.getEncoderForDeclaredType(normalized, declaredOracleType{})
+}
 
-	candidates := f.encoders.getCandidates(normalized.goType)
+// getNestedEncoder resolves an encoder for one ADT child using both its Go
+// value and the child type declared by the containing Oracle type.
+func (f *CodecFactoryImpl) getNestedEncoder(value driver.Value, declared declaredOracleType) (*typeEncoder, error) {
+	return f.getEncoderForDeclaredType(normalizeBindValue(value), declared)
+}
+
+func (f *CodecFactoryImpl) getEncoderForDeclaredType(normalized normalizedBindValue, declared declaredOracleType) (*typeEncoder, error) {
+	if normalized.isOutOnly || normalized.value == nil {
+		return newCLRBindEncoder(converters.EncodeNull)(f), nil
+	}
+	common.Odl.Finest("New encoder requested", "goType", normalized.goType, "declaredType", declared)
+
+	candidates := f.encoders.getCandidates(encoderRegistryKey{goType: normalized.goType, declared: declared})
 	bestCandidate := getEntryFromRegistry(f.ttcVersion, candidates)
+	if bestCandidate == nil && declared != (declaredOracleType{}) {
+		candidates = f.encoders.getCandidates(encoderRegistryKey{goType: normalized.goType})
+		bestCandidate = getEntryFromRegistry(f.ttcVersion, candidates)
+	}
 	if bestCandidate != nil {
 		common.Odl.Finest("Encoder returned", "candidate", bestCandidate)
-		return bestCandidate.makeFunc, nil
+		return bestCandidate.makeFunc(f), nil
 	}
 
 	err := common.NewOracleError(oracleErrors.InternalError, nil)
-	common.Odl.Error("Encoder candidate missing", "goType", normalized.goType, "error", err)
+	common.Odl.Error("Encoder candidate missing", "goType", normalized.goType, "declaredType", declared, "error", err)
 	return nil, err
 }
 

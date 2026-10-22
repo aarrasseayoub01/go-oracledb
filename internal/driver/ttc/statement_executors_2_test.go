@@ -61,8 +61,8 @@ import (
 // - statementProcessor resolves encoders/OAC makers through shelf.GetCodecFactory()
 // - tests that construct statementProcessor directly must provide that wiring explicitly
 func registerTestCodecs(shelf *ttiShelf[common.MessageType], ttcProtocolVersion int8) {
-	var encoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
-	maps.Copy(encoderRegistry.entries, EncoderRegistry.entries)
+	encoderRegistry := newEncoderRegistry()
+	maps.Copy(encoderRegistry.registry.entries, EncoderRegistry.registry.entries)
 	var decoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
 	maps.Copy(decoderRegistry.entries, DecoderRegistry.entries)
 	var bindOacRegistry = newCodecRegistry[reflect.Type, bindOacType]()
