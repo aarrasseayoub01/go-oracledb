@@ -79,10 +79,10 @@ func dummyDefineOacB(columnContext, common.UB4) common.Marshallable {
 	return newTTIoac(DtyVCS, define_maxlength_varchar)
 }
 
-// TestCodecFactory_getEncoder exercises encoder selection and error paths for CodecFactoryImpl.
+// TestCodecFactory_getEncoderForGoType exercises encoder selection and error paths for CodecFactoryImpl.
 // It validates that the highest compatible version is returned for a given protocol and Go type,
 // and that the factory emits structured Oracle errors when the Go type is nil or unregistered.
-func TestCodecFactory_getEncoder(t *testing.T) {
+func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
 		name        string
@@ -100,8 +100,8 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			protocol: 3,
 			value:    int64(0),
 			setup: func(reg *encoderRegistry) {
-				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
-				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
+				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 1, newCLRBindEncoder(dummyEncoderA))
+				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 3, newCLRBindEncoder(dummyEncoderB))
 			},
 			wantValue: common.B1Array{1, 2, 3},
 		},
@@ -110,7 +110,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			protocol: 1,
 			value:    int64(0),
 			setup: func(reg *encoderRegistry) {
-				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
+				reg.Register(reflect.TypeOf(int64(0)), DtyNum, 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
@@ -133,7 +133,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			}
 			factory := &CodecFactoryImpl{ttcVersion: tc.protocol, encoders: encReg}
 
-			encoder, err := factory.getEncoder(normalizeBindValue(tc.value))
+			encoder, err := factory.getEncoderForGoType(normalizeBindValue(tc.value))
 			if tc.expectError {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -162,55 +162,26 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 	}
 }
 
-type nestedEncoderTestValue struct {
-	element     driver.Value
-	elementType declaredOracleType
-}
-
-// TestCodecFactory_getNestedEncoderUsesDeclaredOracleType verifies that an
-// encoder builder can resolve a child encoder with Oracle type metadata. This
-// lets an ADT encoder distinguish, for example, NUMBER from BINARY_DOUBLE even
-// when the Go values have the same concrete type.
-func TestCodecFactory_getNestedEncoderUsesDeclaredOracleType(t *testing.T) {
+// TestCodecFactory_getEncoderForDtyType verifies that an ADT encoder can
+// resolve a child encoder from the element type declared by Oracle metadata.
+func TestCodecFactory_getEncoderForDtyType(t *testing.T) {
 	t.Parallel()
 
 	registry := newEncoderRegistry()
-	declared := declaredOracleType{dataType: DtyNum, typeName: "SCHEMA.NUMBER_ARRAY"}
-	if err := registry.Register(reflect.TypeOf(""), 1, newCLRBindEncoder(func(driver.Value) (common.B1Array, error) {
-		return common.B1Array("fallback"), nil
-	})); err != nil {
-		t.Fatalf("register fallback encoder: %v", err)
+	if err := registry.Register(reflect.TypeOf(int64(0)), DtyNum, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
+		t.Fatalf("register NUMBER encoder: %v", err)
 	}
-	if err := registry.RegisterForDeclaredType(reflect.TypeOf(""), declared, 1, newCLRBindEncoder(func(driver.Value) (common.B1Array, error) {
-		return common.B1Array("declared"), nil
-	})); err != nil {
-		t.Fatalf("register declared-type encoder: %v", err)
-	}
-	if err := registry.Register(reflect.TypeOf(nestedEncoderTestValue{}), 1, func(resolver encoderResolver) *typeEncoder {
-		return newTypeEncoder(func(value driver.Value) (common.B1Array, error) {
-			nested := value.(nestedEncoderTestValue)
-			encoder, err := resolver.getNestedEncoder(nested.element, nested.elementType)
-			if err != nil {
-				return nil, err
-			}
-			return encoder.encodeToType(nested.element)
-		}, wrapCLRColumn)
-	}); err != nil {
-		t.Fatalf("register container encoder: %v", err)
-	}
-
 	factory := &CodecFactoryImpl{ttcVersion: 1, encoders: registry}
-	value := nestedEncoderTestValue{element: "value", elementType: declared}
-	encoder, err := factory.getEncoder(normalizeBindValue(value))
+	encoder, err := factory.getEncoderForDtyType(DtyNum)
 	if err != nil {
-		t.Fatalf("get container encoder: %v", err)
+		t.Fatalf("get NUMBER encoder: %v", err)
 	}
-	got, err := encoder.encodeToType(value)
+	got, err := encoder.encodeToType(int64(1))
 	if err != nil {
-		t.Fatalf("encode nested value: %v", err)
+		t.Fatalf("encode NUMBER value: %v", err)
 	}
-	if string(got) != "declared" {
-		t.Fatalf("nested encoder = %q, want declared-type encoder", got)
+	if !reflect.DeepEqual(got, common.B1Array{1, 2, 3}) {
+		t.Fatalf("DtyType encoder result = %v, want [1 2 3]", got)
 	}
 }
 

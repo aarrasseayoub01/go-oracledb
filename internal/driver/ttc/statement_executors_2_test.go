@@ -62,29 +62,30 @@ import (
 // - tests that construct statementProcessor directly must provide that wiring explicitly
 func registerTestCodecs(shelf *ttiShelf[common.MessageType], ttcProtocolVersion int8) {
 	encoderRegistry := newEncoderRegistry()
-	maps.Copy(encoderRegistry.registry.entries, EncoderRegistry.registry.entries)
+	maps.Copy(encoderRegistry.byGoType.entries, EncoderRegistry.byGoType.entries)
+	maps.Copy(encoderRegistry.byDtyType.entries, EncoderRegistry.byDtyType.entries)
 	var decoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
 	maps.Copy(decoderRegistry.entries, DecoderRegistry.entries)
 	var bindOacRegistry = newCodecRegistry[reflect.Type, bindOacType]()
 	maps.Copy(bindOacRegistry.entries, BindOacRegistry.entries)
 	// Register encoders used by prepareBindsAndOAC tests.
 	// (Registration uses "version 2" which is <= any supported protocol version in tests.)
-	_ = encoderRegistry.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf(int64(0)), DtyNum, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeInt(v.(int64))
 	}))
-	_ = encoderRegistry.Register(reflect.TypeOf(""), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf(""), DtyVCS, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeVarchar(v.(string))
 	}))
-	_ = encoderRegistry.Register(reflect.TypeOf([]byte(nil)), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf([]byte(nil)), DtyVbi, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return common.B1Array(v.([]byte)), nil
 	}))
-	_ = encoderRegistry.Register(reflect.TypeOf(true), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf(true), DtyBol, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeBoolean(v.(bool))
 	}))
-	_ = encoderRegistry.Register(reflect.TypeOf(time.Time{}), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf(time.Time{}), DtyStz, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeTimestampWithTimeZone(v.(time.Time))
 	}))
-	_ = encoderRegistry.Register(reflect.TypeOf(nil), 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
+	_ = encoderRegistry.Register(reflect.TypeOf(nil), dtyNoType, 2, newCLRBindEncoder(func(v sqldriver.Value) (common.B1Array, error) {
 		return converters.EncodeNull(v)
 	}))
 

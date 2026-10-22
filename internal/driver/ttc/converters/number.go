@@ -290,6 +290,30 @@ func EncodeUInt(v driver.Value) (driverCommon.B1Array, error) {
 	return encodeIntegerDigitsStrict(digits, false), nil
 }
 
+// EncodeNumber encodes a supported Go numeric value as an Oracle NUMBER. It
+// is used when a declared ADT element is NUMBER and the element's concrete Go
+// numeric type is chosen by the caller.
+func EncodeNumber(v driver.Value) (driverCommon.B1Array, error) {
+	kind := reflect.ValueOf(v).Kind()
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return EncodeInt(v)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return EncodeUInt(v)
+	case reflect.Float32, reflect.Float64:
+		return EncodeFloat(v)
+	default:
+		return nil, common.NewOracleError(
+			oracleErrors.ConverterExpectedFormat,
+			nil,
+			"NUMBER",
+			"Encode",
+			driverCommon.ReasonInvalidFormat,
+			"numeric",
+		)
+	}
+}
+
 /*
 EncodeBinary returns the underlying byte slice for a binary value.
 

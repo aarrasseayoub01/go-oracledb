@@ -662,7 +662,7 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 		// sql.Out{}, int, float, string,time
 		var err error
 		normalized := normalizeBindValue(v)
-		encoder, err := e.shelf.GetCodecFactory().getEncoder(normalized)
+		encoder, err := e.shelf.GetCodecFactory().getEncoderForGoType(normalized)
 		if err != nil {
 			return err
 		}
