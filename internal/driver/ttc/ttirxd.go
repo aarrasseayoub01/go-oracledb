@@ -171,7 +171,7 @@ func (rxd *tTIrxd) MarshalTo(ctx context.Context, engine driverCommon.Marshaller
 		return common.NewOracleError(oracleErrors.InternalError, nil)
 	}
 	for i := range rxd.bindRow {
-		if err := rxd.wrapColumns[i](ctx, engine, rxd.GetMsgCode(), i, rxd.bindRow[i].payload); err != nil {
+		if err := rxd.wrapColumns[i](ctx, engine, rxd.bindRow[i].payload); err != nil {
 			return err
 		}
 	}

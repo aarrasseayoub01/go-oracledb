@@ -77,7 +77,7 @@ Description:
 		normalized := normalizeBindValue(bindValue)
 
 		encoder, _ := f.getEncoder(normalized)
-		payload, _ := encoder.encode(normalized.value)
+		payload, _ := encoder.encodeToType(normalized.value)
 
 		oac, _ := f.getBindOac(normalized, driverCommon.UB4(len(payload)))
 		_ = oac // e.g. used to describe bind metadata (type/length) in TTC messages
@@ -92,33 +92,6 @@ type codecFactory interface {
 	getDecoder(DtyType) (*typeDecoder, error)
 	getBindOac(normalizedBindValue, driverCommon.UB4) (driverCommon.Marshallable, error)
 	getDefineOac(DtyType, columnContext, driverCommon.DriverProperties) driverCommon.Marshallable
-}
-
-// encoderFunc encodes a Go bind value into its logical payload bytes.
-type encoderFunc func(driver.Value) (driverCommon.B1Array, error)
-
-// typeEncoder groups logical value encoding and TTC bind framing for one Go
-// type and TTC protocol version.
-type typeEncoder struct {
-	encodeToType encoderFunc
-	wrapColumn   columnWrapFunc
-}
-
-// newTypeEncoder associates a value encoder with its TTIRXD bind framing.
-func newTypeEncoder(encode encoderFunc, wrap columnWrapFunc) *typeEncoder {
-	return &typeEncoder{encodeToType: encode, wrapColumn: wrap}
-}
-
-// newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
-// bind representation.
-func newCLRBindEncoder(encode encoderFunc) *typeEncoder {
-	return newTypeEncoder(encode, wrapCLRColumn)
-}
-
-// encode prepares the logical payload. The statement executor retains this
-// encoder's transport wrapper for TTIRXD to use while marshalling the bind row.
-func (e *typeEncoder) encode(value driver.Value) (driverCommon.B1Array, error) {
-	return e.encodeToType(value)
 }
 
 // decoderFunc defines the signature for TTC decoder implementors registered with the

@@ -151,7 +151,7 @@ func TestCodecFactory_getEncoder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			got, err := encoder.encode(normalizeBindValue(tc.value).value)
+			got, err := encoder.encodeToType(normalizeBindValue(tc.value).value)
 			if err != nil {
 				t.Fatalf("unexpected encode error: %v", err)
 			}

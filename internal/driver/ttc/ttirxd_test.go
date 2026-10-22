@@ -154,7 +154,7 @@ func TestTTIrxd_MarshalTo_PreparedBindValue(t *testing.T) {
 	t.Parallel()
 	rxd := newTTIrxd().(*tTIrxd)
 	rxd.setBindValues([]bindValue{{payload: common.B1Array{0x01, 0x02, 0x03}}}, []columnWrapFunc{
-		func(ctx context.Context, mar common.Marshaller, _ common.MessageType, _ int, _ common.B1Array) error {
+		func(ctx context.Context, mar common.Marshaller, _ common.B1Array) error {
 			return mar.MarshalUB1(ctx, 0x7F)
 		},
 	})

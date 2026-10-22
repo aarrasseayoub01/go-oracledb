@@ -667,7 +667,7 @@ func (e *statementProcessor) prepareBindsAndOAC(args []sqldriver.Value) error {
 			return err
 		}
 
-		payload, err := encoder.encode(normalized.value)
+		payload, err := encoder.encodeToType(normalized.value)
 		if err != nil {
 			return err
 		}
