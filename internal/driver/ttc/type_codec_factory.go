@@ -392,9 +392,9 @@ func (r *codecRegistry[K, F]) getCandidates(key K) []codecRegistryEntry[F] {
 	return nil
 }
 
-// EncoderRegistry is the global registry for normal bind encoders keyed by Go
+// GoTypeEncoderRegistry is the global registry for normal bind encoders keyed by Go
 // type. Populate it during package init of encoder implementors.
-var EncoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
+var GoTypeEncoderRegistry = newCodecRegistry[reflect.Type, *typeEncoder]()
 
 // DtyEncoderRegistry is the global registry for scalar ADT element encoders
 // keyed by their declared Oracle TTC datatype.
@@ -416,7 +416,7 @@ CodecFactoryImpl is the codecFactory implementation used by TTC to resolve encod
 Description:
 
 	Uses the negotiated TTC protocol version to select the "best" registered implementation candidate from:
-	- EncoderRegistry (Go reflect.Type -> typeEncoder)
+	- GoTypeEncoderRegistry (Go reflect.Type -> typeEncoder)
 	- DtyEncoderRegistry (Oracle DtyType -> typeEncoder)
 	- DecoderRegistry (Oracle db type id -> decoderFunc)
 	- BindOacRegistry (Go reflect.Type -> bindOacType)
@@ -437,7 +437,7 @@ NewCodecFactoryForProtocol constructs a codecFactory for a negotiated TTC protoc
 Description:
 
 	Returns a factory that resolves encoders/decoders/OAC makers using the default global registries
-	(EncoderRegistry, DtyEncoderRegistry, DecoderRegistry, BindOacRegistry, and DefineOacRegistry) and the provided TTC protocol version.
+	(GoTypeEncoderRegistry, DtyEncoderRegistry, DecoderRegistry, BindOacRegistry, and DefineOacRegistry) and the provided TTC protocol version.
 
 Parameters:
   - protocolVersion: Negotiated TTC protocol version.
@@ -451,7 +451,7 @@ Errors:
 func NewCodecFactoryForProtocol(protocolVersion int8) codecFactory {
 	return &CodecFactoryImpl{
 		ttcVersion:  protocolVersion,
-		encoders:    EncoderRegistry,
+		encoders:    GoTypeEncoderRegistry,
 		dtyEncoders: DtyEncoderRegistry,
 		decoders:    DecoderRegistry,
 		bindOacs:    BindOacRegistry,

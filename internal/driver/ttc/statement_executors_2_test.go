@@ -62,7 +62,7 @@ import (
 // - tests that construct statementProcessor directly must provide that wiring explicitly
 func registerTestCodecs(shelf *ttiShelf[common.MessageType], ttcProtocolVersion int8) {
 	encoderRegistry := newCodecRegistry[reflect.Type, *typeEncoder]()
-	maps.Copy(encoderRegistry.entries, EncoderRegistry.entries)
+	maps.Copy(encoderRegistry.entries, GoTypeEncoderRegistry.entries)
 	dtyEncoderRegistry := newCodecRegistry[DtyType, *typeEncoder]()
 	maps.Copy(dtyEncoderRegistry.entries, DtyEncoderRegistry.entries)
 	var decoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
