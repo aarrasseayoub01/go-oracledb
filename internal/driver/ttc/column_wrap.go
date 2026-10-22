@@ -41,31 +41,11 @@ package ttc
 
 import (
 	"context"
-	"database/sql/driver"
 
 	"github.com/oracle/go-oracledb/v26/internal/common"
 	driverCommon "github.com/oracle/go-oracledb/v26/internal/driver/common"
 	oracleErrors "github.com/oracle/go-oracledb/v26/oracle/errors"
 )
-
-// encoderFunc encodes a Go bind value into its logical payload bytes.
-type encoderFunc func(driver.Value) (driverCommon.B1Array, error)
-
-// columnWrapFunc writes one encoded bind payload into an outgoing TTIRXD message.
-// The default implementation uses the ordinary TTC CLR representation.
-type columnWrapFunc func(context.Context, driverCommon.Marshaller, driverCommon.B1Array) error
-
-// typeEncoder groups logical value encoding and TTC bind framing for one Go
-// type and TTC protocol version.
-type typeEncoder struct {
-	encodeToType encoderFunc
-	wrapColumn   columnWrapFunc
-}
-
-// newTypeEncoder associates a value encoder with its TTIRXD bind framing.
-func newTypeEncoder(encode encoderFunc, wrap columnWrapFunc) *typeEncoder {
-	return &typeEncoder{encodeToType: encode, wrapColumn: wrap}
-}
 
 // newCLRBindEncoder adapts an ordinary value encoder to TTC's standard CLR
 // bind representation.

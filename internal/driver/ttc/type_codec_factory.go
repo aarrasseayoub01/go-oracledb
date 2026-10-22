@@ -39,6 +39,7 @@
 package ttc
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
@@ -92,6 +93,25 @@ type codecFactory interface {
 	getDecoder(DtyType) (*typeDecoder, error)
 	getBindOac(normalizedBindValue, driverCommon.UB4) (driverCommon.Marshallable, error)
 	getDefineOac(DtyType, columnContext, driverCommon.DriverProperties) driverCommon.Marshallable
+}
+
+// encoderFunc encodes a Go bind value into its logical payload bytes.
+type encoderFunc func(driver.Value) (driverCommon.B1Array, error)
+
+// columnWrapFunc writes one encoded bind payload into an outgoing TTIRXD message.
+// The default implementation uses the ordinary TTC CLR representation.
+type columnWrapFunc func(context.Context, driverCommon.Marshaller, driverCommon.B1Array) error
+
+// typeEncoder groups logical value encoding and TTC bind framing for one Go
+// type and TTC protocol version.
+type typeEncoder struct {
+	encodeToType encoderFunc
+	wrapColumn   columnWrapFunc
+}
+
+// newTypeEncoder associates a value encoder with its TTIRXD bind framing.
+func newTypeEncoder(encode encoderFunc, wrap columnWrapFunc) *typeEncoder {
+	return &typeEncoder{encodeToType: encode, wrapColumn: wrap}
 }
 
 // decoderFunc defines the signature for TTC decoder implementors registered with the
