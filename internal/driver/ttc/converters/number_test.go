@@ -157,41 +157,6 @@ func TestNumber_KnownWireFormats(t *testing.T) {
 	}
 }
 
-// TestEncodeNumberDispatch verifies that the DtyNum encoder accepts each Go
-// numeric kind supported by ordinary bind encoding.
-func TestEncodeNumberDispatch(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name  string
-		value any
-		want  func(any) ([]byte, error)
-	}{
-		{"signed", int32(-42), func(value any) ([]byte, error) { return EncodeInt(value) }},
-		{"unsigned", uint32(42), func(value any) ([]byte, error) { return EncodeUInt(value) }},
-		{"float", float64(12.5), func(value any) ([]byte, error) { return EncodeFloat(value) }},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := EncodeNumber(tc.value)
-			if err != nil {
-				t.Fatalf("EncodeNumber(%v): %v", tc.value, err)
-			}
-			want, err := tc.want(tc.value)
-			if err != nil {
-				t.Fatalf("individual encoder(%v): %v", tc.value, err)
-			}
-			if !bytes.Equal(got, want) {
-				t.Fatalf("EncodeNumber(%v) = %v, want %v", tc.value, got, want)
-			}
-		})
-	}
-
-	if _, err := EncodeNumber("not a number"); err == nil {
-		t.Fatal("EncodeNumber accepted a non-numeric value")
-	}
-}
-
 // TestNumber_DecodeDecimal ensures DecodeDecimal yields expected strings for
 // NUMBER(p,s) examples across magnitudes and signs, including Oracle's special zero.
 func TestNumber_DecodeDecimal(t *testing.T) {

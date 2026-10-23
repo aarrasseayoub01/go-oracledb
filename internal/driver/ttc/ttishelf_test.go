@@ -279,7 +279,7 @@ type testCodecFactory struct {
 func (t *testCodecFactory) getEncoderForGoType(_ normalizedBindValue) (*typeEncoder, error) {
 	return newCLRBindEncoder(func(driver.Value) (driverCommon.B1Array, error) { return t.encode, nil }), nil
 }
-func (t *testCodecFactory) getEncoderForDtyType(_ DtyType) (*typeEncoder, error) {
+func (t *testCodecFactory) getEncoderForDtyType(_ DtyType, _ normalizedBindValue) (*typeEncoder, error) {
 	return newCLRBindEncoder(func(driver.Value) (driverCommon.B1Array, error) { return t.encode, nil }), nil
 }
 func (t *testCodecFactory) getDecoder(_ DtyType) (*typeDecoder, error) {

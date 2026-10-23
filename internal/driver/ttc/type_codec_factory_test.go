@@ -167,21 +167,36 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 func TestCodecFactory_getEncoderForDtyType(t *testing.T) {
 	t.Parallel()
 
-	registry := newCodecRegistry[DtyType, *typeEncoder]()
-	if err := registry.Register(DtyNum, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
-		t.Fatalf("register NUMBER encoder: %v", err)
+	registry := newCodecRegistry[dtyEncoderKey, *typeEncoder]()
+	if err := registry.Register(dtyEncoderKey{dtyType: DtyNum, goType: reflect.TypeOf(int64(0))}, 1, newCLRBindEncoder(dummyEncoderA)); err != nil {
+		t.Fatalf("register integer NUMBER encoder: %v", err)
+	}
+	if err := registry.Register(dtyEncoderKey{dtyType: DtyNum, goType: reflect.TypeOf(float64(0))}, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
+		t.Fatalf("register float NUMBER encoder: %v", err)
 	}
 	factory := &CodecFactoryImpl{ttcVersion: 1, dtyEncoders: registry}
-	encoder, err := factory.getEncoderForDtyType(DtyNum)
+	encoder, err := factory.getEncoderForDtyType(DtyNum, normalizeBindValue(float64(1)))
 	if err != nil {
-		t.Fatalf("get NUMBER encoder: %v", err)
+		t.Fatalf("get float NUMBER encoder: %v", err)
 	}
-	got, err := encoder.encodeToType(int64(1))
+	got, err := encoder.encodeToType(float64(1))
 	if err != nil {
-		t.Fatalf("encode NUMBER value: %v", err)
+		t.Fatalf("encode float NUMBER value: %v", err)
 	}
 	if !reflect.DeepEqual(got, common.B1Array{1, 2, 3}) {
-		t.Fatalf("DtyType encoder result = %v, want [1 2 3]", got)
+		t.Fatalf("float DtyType encoder result = %v, want [1 2 3]", got)
+	}
+
+	encoder, err = factory.getEncoderForDtyType(DtyNum, normalizeBindValue(int64(1)))
+	if err != nil {
+		t.Fatalf("get integer NUMBER encoder: %v", err)
+	}
+	got, err = encoder.encodeToType(int64(1))
+	if err != nil {
+		t.Fatalf("encode integer NUMBER value: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("integer DtyType encoder result = %v, want nil", got)
 	}
 }
 

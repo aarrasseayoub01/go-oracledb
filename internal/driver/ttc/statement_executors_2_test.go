@@ -63,7 +63,7 @@ import (
 func registerTestCodecs(shelf *ttiShelf[common.MessageType], ttcProtocolVersion int8) {
 	encoderRegistry := newCodecRegistry[reflect.Type, *typeEncoder]()
 	maps.Copy(encoderRegistry.entries, GoTypeEncoderRegistry.entries)
-	dtyEncoderRegistry := newCodecRegistry[DtyType, *typeEncoder]()
+	dtyEncoderRegistry := newCodecRegistry[dtyEncoderKey, *typeEncoder]()
 	maps.Copy(dtyEncoderRegistry.entries, DtyEncoderRegistry.entries)
 	var decoderRegistry = newCodecRegistry[DtyType, *typeDecoder]()
 	maps.Copy(decoderRegistry.entries, DecoderRegistry.entries)

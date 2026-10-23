@@ -117,7 +117,6 @@ var testCases = []oracleTest.CategorizedTestCase{
 	{Name: "TestIntervalDayToSecond_Encode_Errors_Whitespace", Categories: "unitary", Exclusive: false, Fn: TestIntervalDayToSecond_Encode_Errors_Whitespace},
 	{Name: "TestIntervalDayToSecond_Encode_TrimWhitespace_Success", Categories: "unitary", Exclusive: false, Fn: TestIntervalDayToSecond_Encode_TrimWhitespace_Success},
 	{Name: "TestNumber_KnownWireFormats", Categories: "unitary", Exclusive: false, Fn: TestNumber_KnownWireFormats},
-	{Name: "TestEncodeNumberDispatch", Categories: "unitary", Exclusive: false, Fn: TestEncodeNumberDispatch},
 	{Name: "TestNumber_DecodeDecimal", Categories: "unitary", Exclusive: false, Fn: TestNumber_DecodeDecimal},
 	{Name: "TestNumber_OverlongWire", Categories: "unitary", Exclusive: false, Fn: TestNumber_OverlongWire},
 	{Name: "TestNumber_FromNumberBig_WireLengthBoundary", Categories: "unitary", Exclusive: false, Fn: TestNumber_FromNumberBig_WireLengthBoundary},
