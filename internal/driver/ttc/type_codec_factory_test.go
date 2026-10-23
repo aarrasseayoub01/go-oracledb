@@ -88,7 +88,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 		name        string
 		protocol    int8
 		value       driver.Value
-		setup       func(reg *codecRegistry[reflect.Type, *typeEncoder])
+		setup       func(reg *codecRegistry[encoderKey, *typeEncoder])
 		wantValue   common.B1Array
 		expectError bool
 		errCode     oracleErrors.ErrorCode
@@ -99,9 +99,9 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:     "selects highest version within protocol",
 			protocol: 3,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
-				reg.Register(reflect.TypeOf(int64(0)), 1, newCLRBindEncoder(dummyEncoderA))
-				reg.Register(reflect.TypeOf(int64(0)), 3, newCLRBindEncoder(dummyEncoderB))
+			setup: func(reg *codecRegistry[encoderKey, *typeEncoder]) {
+				reg.Register(encoderKey{goType: reflect.TypeOf(int64(0))}, 1, newCLRBindEncoder(dummyEncoderA))
+				reg.Register(encoderKey{goType: reflect.TypeOf(int64(0))}, 3, newCLRBindEncoder(dummyEncoderB))
 			},
 			wantValue: common.B1Array{1, 2, 3},
 		},
@@ -109,8 +109,8 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:     "skips candidates greater than protocol",
 			protocol: 1,
 			value:    int64(0),
-			setup: func(reg *codecRegistry[reflect.Type, *typeEncoder]) {
-				reg.Register(reflect.TypeOf(int64(0)), 2, newCLRBindEncoder(dummyEncoderB))
+			setup: func(reg *codecRegistry[encoderKey, *typeEncoder]) {
+				reg.Register(encoderKey{goType: reflect.TypeOf(int64(0))}, 2, newCLRBindEncoder(dummyEncoderB))
 			},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
@@ -119,7 +119,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 			name:        "no registered encoder",
 			protocol:    1,
 			value:       "",
-			setup:       func(reg *codecRegistry[reflect.Type, *typeEncoder]) {},
+			setup:       func(reg *codecRegistry[encoderKey, *typeEncoder]) {},
 			expectError: true,
 			errCode:     oracleErrors.InternalError,
 		},
@@ -127,7 +127,7 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			encReg := newCodecRegistry[reflect.Type, *typeEncoder]()
+			encReg := newCodecRegistry[encoderKey, *typeEncoder]()
 			if tc.setup != nil {
 				tc.setup(encReg)
 			}
@@ -162,19 +162,22 @@ func TestCodecFactory_getEncoderForGoType(t *testing.T) {
 	}
 }
 
-// TestCodecFactory_getEncoderForDtyType verifies that an ADT encoder can
-// resolve a child encoder from the element type declared by Oracle metadata.
+// TestCodecFactory_getEncoderForDtyType verifies that ADT-specific encoder
+// entries override ordinary Go-type entries, which are otherwise reused.
 func TestCodecFactory_getEncoderForDtyType(t *testing.T) {
 	t.Parallel()
 
-	registry := newCodecRegistry[dtyEncoderKey, *typeEncoder]()
-	if err := registry.Register(dtyEncoderKey{dtyType: DtyNum, goType: reflect.TypeOf(int64(0))}, 1, newCLRBindEncoder(dummyEncoderA)); err != nil {
-		t.Fatalf("register integer NUMBER encoder: %v", err)
+	registry := newCodecRegistry[encoderKey, *typeEncoder]()
+	if err := registry.Register(encoderKey{goType: reflect.TypeOf(int64(0))}, 1, newCLRBindEncoder(dummyEncoderA)); err != nil {
+		t.Fatalf("register ordinary integer encoder: %v", err)
 	}
-	if err := registry.Register(dtyEncoderKey{dtyType: DtyNum, goType: reflect.TypeOf(float64(0))}, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
+	if err := registry.Register(encoderKey{goType: reflect.TypeOf(float64(0))}, 1, newCLRBindEncoder(dummyEncoderA)); err != nil {
+		t.Fatalf("register ordinary float encoder: %v", err)
+	}
+	if err := registry.Register(encoderKey{dtyType: DtyNum, goType: reflect.TypeOf(float64(0))}, 1, newCLRBindEncoder(dummyEncoderB)); err != nil {
 		t.Fatalf("register float NUMBER encoder: %v", err)
 	}
-	factory := &CodecFactoryImpl{ttcVersion: 1, dtyEncoders: registry}
+	factory := &CodecFactoryImpl{ttcVersion: 1, encoders: registry}
 	encoder, err := factory.getEncoderForDtyType(DtyNum, normalizeBindValue(float64(1)))
 	if err != nil {
 		t.Fatalf("get float NUMBER encoder: %v", err)
